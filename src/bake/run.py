@@ -29,11 +29,12 @@ from bake.upload import upload_tile
 # Approximate; intersected with state-boundary at fetch time if
 # upstream supports it (INSPIRE WFS does via bbox+CRS).
 HESSEN_BBOX = (49.39, 7.77, 51.66, 10.24)
+BAYERN_BBOX = (47.27, 8.97, 50.56, 13.84)
 
 STATE_BBOXES = {
     "he": HESSEN_BBOX,
+    "by": BAYERN_BBOX,
     # "nw": NRW_BBOX,    # added by Task 20
-    # "by": BAYERN_BBOX, # added by Task 24
 }
 
 R2_BUCKET = "mapbiker-tiles"
@@ -55,6 +56,12 @@ def _bake_state(state: str, out_dir: Path,
             min_chunk_deg=0.005,     # ~500 m
             cap=10000,
             verbose=True,
+        )
+    elif state == "by":
+        from bake.sources import bayern
+        parsed_iter = bayern.fetch_buildings(
+            min_lat=bbox[0], min_lon=bbox[1],
+            max_lat=bbox[2], max_lon=bbox[3],
         )
     else:
         raise ValueError(f"state not yet implemented: {state}")
