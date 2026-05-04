@@ -18,8 +18,10 @@ License: CC BY 4.0. Attribution required: "© Bayerische Vermessungsverwaltung �
 """
 from __future__ import annotations
 
-import io
+import os
 import sys
+import tempfile
+from pathlib import Path
 from typing import Iterator
 
 import requests
@@ -85,34 +87,49 @@ def coverage_tiles(*, min_lat: float, min_lon: float,
     return tiles
 
 
-def fetch_tile(*, easting_km: int, northing_km: int) -> bytes | None:
-    """Download one Bayernwolke tile's CityGML. Returns the raw bytes,
-    or `None` if the tile is missing (HTTP 404 = not in coverage).
+def stream_tile_to_file(*, easting_km: int, northing_km: int,
+                        dest_path: Path) -> int | None:
+    """Download one Bayernwolke tile and write it to `dest_path`.
+    Returns the byte count on success, `None` if the tile is missing
+    (HTTP 404 = not in coverage).
+
+    Streams chunks (8 MiB) directly to disk so memory peak is bounded
+    regardless of tile size. The largest München tile is 156 MB;
+    `requests.get(...).content` would buffer the entire response and
+    then memcpy it during the join, briefly using ~2× the tile size in
+    RAM. Mid-bake, that's enough to hit MemoryError on a 16 GB machine.
 
     Raises `requests.HTTPError` on non-200/404 responses.
     """
     url = tile_url(easting_km=easting_km, northing_km=northing_km)
-    response = requests.get(
+    with requests.get(
         url,
         headers={"User-Agent": USER_AGENT},
         timeout=TIMEOUT_SECONDS,
-    )
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    return response.content
+        stream=True,
+    ) as response:
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        total = 0
+        with dest_path.open("wb") as f:
+            for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+                    total += len(chunk)
+        return total
 
 
 def fetch_buildings(*, min_lat: float, min_lon: float,
                     max_lat: float, max_lon: float
                     ) -> Iterator[ParsedBuilding]:
     """Iterate buildings for every 2 km UTM32N tile intersecting the
-    WGS84 bbox. Streams each downloaded tile through the CityGML 2.0
-    parser; yields ParsedBuildings as they're parsed.
+    WGS84 bbox. Each tile is streamed to a reusable temp file on disk,
+    then stream-parsed via lxml.iterparse — peak memory is bounded by
+    the chunk size + lxml's incremental buffer regardless of tile size.
 
-    The caller (typically `bake.run._bake_state`) is responsible for
-    binning buildings into web-mercator z15 tiles via `bake.retile`
-    and the rest of the pipeline.
+    Caller (typically `bake.run._bake_state`) is responsible for
+    binning buildings into z15 tiles.
     """
     tiles = coverage_tiles(
         min_lat=min_lat, min_lon=min_lon,
@@ -120,28 +137,47 @@ def fetch_buildings(*, min_lat: float, min_lon: float,
     )
     print(f"[bayern] {len(tiles)} UTM32N tiles to fetch",
           file=sys.stderr, flush=True)
-    for i, (ekm, nkm) in enumerate(tiles, 1):
-        try:
-            data = fetch_tile(easting_km=ekm, northing_km=nkm)
-        except requests.HTTPError as e:
-            # Defensive: still skip on unexpected errors rather than
-            # killing the whole bake. Log and continue.
+
+    # One reusable temp file per state-bake — overwritten per tile.
+    # Avoids creating + destroying 35k temp files (would thrash the
+    # filesystem on Windows).
+    tmp_dir = Path(tempfile.gettempdir())
+    tmp_path = tmp_dir / f"mapbiker-bake-bayern-{os.getpid()}.gml"
+
+    try:
+        for i, (ekm, nkm) in enumerate(tiles, 1):
+            try:
+                size = stream_tile_to_file(
+                    easting_km=ekm, northing_km=nkm,
+                    dest_path=tmp_path,
+                )
+            except requests.HTTPError as e:
+                print(
+                    f"[bayern]   tile {ekm}_{nkm} HTTP error "
+                    f"{e.response.status_code if e.response else '?'}"
+                    f" — skipping",
+                    file=sys.stderr, flush=True,
+                )
+                continue
+
+            if size is None:
+                # 404 — tile not in Bayernwolke coverage. Common at
+                # state edges (Czech border, Austria, BW).
+                continue
+
+            size_kb = size // 1024
             print(
-                f"[bayern]   tile {ekm}_{nkm} HTTP error "
-                f"{e.response.status_code if e.response else '?'} — skipping",
+                f"[bayern]   {i}/{len(tiles)} tile {ekm}_{nkm} "
+                f"({size_kb} KB) — parsing",
                 file=sys.stderr, flush=True,
             )
-            continue
-
-        if data is None:
-            # 404 — tile not in Bayernwolke coverage. Common at state
-            # edges (Czech border, Austria, Baden-Württemberg).
-            continue
-
-        size_kb = len(data) // 1024
-        print(
-            f"[bayern]   {i}/{len(tiles)} tile {ekm}_{nkm} "
-            f"({size_kb} KB) — parsing",
-            file=sys.stderr, flush=True,
-        )
-        yield from parse_citygml2_gml(io.BytesIO(data))
+            with tmp_path.open("rb") as f:
+                yield from parse_citygml2_gml(f)
+    finally:
+        # Clean up the temp file when the iterator is exhausted or
+        # the caller bails (StopIteration / GeneratorExit).
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass

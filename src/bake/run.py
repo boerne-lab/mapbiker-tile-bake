@@ -18,10 +18,12 @@ import argparse
 import sys
 from pathlib import Path
 
+import mercantile
+
 from bake.chunking import chunked_fetch
+from bake.intermediate import IntermediateStore
 from bake.normalize import to_schema_building
 from bake.pack import write_tile_file
-from bake.retile import bin_buildings_by_z15_tile
 from bake.sources import hessen
 from bake.upload import upload_tile
 
@@ -42,18 +44,31 @@ R2_BUCKET = "mapbiker-tiles"
 
 def _bake_state(state: str, out_dir: Path,
                 source_version: str, do_upload: bool) -> int:
-    """Fetch + parse + normalize + retile + pack + (optionally) upload
-    one Bundesland's worth of tiles."""
+    """Two-phase bake. Phase 1 streams parsed buildings into per-tile
+    NDJSON files on disk. Phase 2 reads each NDJSON and produces the
+    final gzipped JSON tile. Memory peak is bounded by a single
+    Building (Phase 1) or a single tile's worth of buildings (Phase 2)
+    — never the entire state."""
     state_code = f"de_{state}"
     bbox = STATE_BBOXES[state]
 
+    # Per-bake intermediate store sits next to the final output.
+    intermediate = IntermediateStore(
+        root_dir=out_dir.parent / "intermediate",
+        state=state_code,
+    )
+    intermediate.clear_all()
+    print(f"[{state}] intermediate store at "
+          f"{intermediate.state_root}", file=sys.stderr, flush=True)
+
+    # ----- Phase 1: stream-bin -----
     if state == "he":
         parsed_iter = chunked_fetch(
             hessen.fetch_buildings,
             lat_min=bbox[0], lon_min=bbox[1],
             lat_max=bbox[2], lon_max=bbox[3],
-            initial_chunk_deg=0.05,  # ~5 km
-            min_chunk_deg=0.005,     # ~500 m
+            initial_chunk_deg=0.05,
+            min_chunk_deg=0.005,
             cap=10000,
             verbose=True,
         )
@@ -66,42 +81,58 @@ def _bake_state(state: str, out_dir: Path,
     else:
         raise ValueError(f"state not yet implemented: {state}")
 
-    # Materialise the iterator as we normalise — keeps memory usage
-    # bounded by total building count, not response body size.
-    buildings = []
+    n_parsed = 0
+    n_binned = 0
     for parsed in parsed_iter:
         b = to_schema_building(parsed)
-        if b is not None:
-            buildings.append(b)
-    print(f"[{state}] parsed {len(buildings)} buildings",
-          file=sys.stderr, flush=True)
+        if b is None:
+            continue
+        n_parsed += 1
+        # Inline centroid + tile lookup. We avoid the
+        # bin_buildings_by_z15_tile([list]) shape because that requires
+        # the whole list in memory, defeating the refactor's purpose.
+        verts = b.polygons[0].vertices
+        n_v = len(verts)
+        lon = sum(v.lon for v in verts) / n_v
+        lat = sum(v.lat for v in verts) / n_v
+        t = mercantile.tile(lon, lat, 15)
+        intermediate.append_building(
+            z=15, x=t.x, y=t.y, building=b,
+        )
+        n_binned += 1
+        if n_binned % 10_000 == 0:
+            print(f"[{state}] phase 1: {n_binned} buildings binned",
+                  file=sys.stderr, flush=True)
 
-    bins = bin_buildings_by_z15_tile(buildings)
-    print(f"[{state}] binned into {len(bins)} z15 tiles",
-          file=sys.stderr, flush=True)
+    print(f"[{state}] phase 1 done: {n_parsed} parsed, "
+          f"{n_binned} binned to disk", file=sys.stderr, flush=True)
 
-    paths = []
-    for (z, x, y), tile_buildings in bins.items():
+    # ----- Phase 2: finalize per tile -----
+    n_tiles = 0
+    for (z, x, y) in intermediate.iter_tile_keys():
+        tile_buildings = intermediate.read_tile(z=z, x=x, y=y)
         p = write_tile_file(
             out_dir=out_dir, state=state_code,
             z=z, x=x, y=y,
             buildings=tile_buildings,
             source_dataset_version=source_version,
         )
-        paths.append(p)
-    print(f"[{state}] wrote {len(paths)} tile files",
-          file=sys.stderr, flush=True)
-
-    if do_upload:
-        for i, p in enumerate(paths, 1):
+        if do_upload:
             rel = p.relative_to(out_dir).as_posix()
-            upload_tile(local_path=p, bucket=R2_BUCKET, remote_key=rel)
-            if i % 50 == 0 or i == len(paths):
-                print(f"[{state}] uploaded {i}/{len(paths)}",
-                      file=sys.stderr, flush=True)
-        print(f"[{state}] uploaded {len(paths)} tiles to R2",
-              file=sys.stderr, flush=True)
+            upload_tile(
+                local_path=p, bucket=R2_BUCKET, remote_key=rel,
+            )
+        # Free intermediate disk space progressively as each tile
+        # is finalised — keeps peak disk usage tighter.
+        intermediate.clear_tile(z=z, x=x, y=y)
+        n_tiles += 1
+        if n_tiles % 50 == 0:
+            verb = "uploaded" if do_upload else "wrote"
+            print(f"[{state}] phase 2: {verb} {n_tiles} tiles",
+                  file=sys.stderr, flush=True)
 
+    print(f"[{state}] phase 2 done: {n_tiles} tiles total",
+          file=sys.stderr, flush=True)
     return 0
 
 
