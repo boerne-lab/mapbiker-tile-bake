@@ -2,7 +2,7 @@
 name = "mapbiker-tile-bake"
 version = "0.1.0"
 description = "Bake LoD2 tiles for mapbiker from German Bundesland sources to R2"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "lxml>=5.3",
     "pyogrio>=0.10",
