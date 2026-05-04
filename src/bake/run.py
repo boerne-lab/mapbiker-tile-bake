@@ -18,6 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from bake.chunking import chunked_fetch
 from bake.normalize import to_schema_building
 from bake.pack import write_tile_file
 from bake.retile import bin_buildings_by_z15_tile
@@ -46,9 +47,14 @@ def _bake_state(state: str, out_dir: Path,
     bbox = STATE_BBOXES[state]
 
     if state == "he":
-        parsed_iter = hessen.fetch_buildings(
-            min_lat=bbox[0], min_lon=bbox[1],
-            max_lat=bbox[2], max_lon=bbox[3],
+        parsed_iter = chunked_fetch(
+            hessen.fetch_buildings,
+            lat_min=bbox[0], lon_min=bbox[1],
+            lat_max=bbox[2], lon_max=bbox[3],
+            initial_chunk_deg=0.05,  # ~5 km
+            min_chunk_deg=0.005,     # ~500 m
+            cap=10000,
+            verbose=True,
         )
     else:
         raise ValueError(f"state not yet implemented: {state}")
