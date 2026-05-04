@@ -63,11 +63,18 @@ def _bake_state(state: str, out_dir: Path,
 
     # ----- Phase 1: stream-bin -----
     if state == "he":
+        # Initial chunk 0.1° (~11 km at DACH lat). Most rural cells
+        # finish in one query; urban cells (Frankfurt, Wiesbaden,
+        # Kassel, Darmstadt) hit the 10000-cap and split recursively
+        # to 0.05°, 0.025°, etc. as needed. Larger initial cells
+        # cut the rural-Hessen iteration count by ~4× vs the prior
+        # 0.05° default — Vogelsberg / northern Hesse forests yield
+        # one cheap "0 buildings" response per cell instead of four.
         parsed_iter = chunked_fetch(
             hessen.fetch_buildings,
             lat_min=bbox[0], lon_min=bbox[1],
             lat_max=bbox[2], lon_max=bbox[3],
-            initial_chunk_deg=0.05,
+            initial_chunk_deg=0.1,
             min_chunk_deg=0.005,
             cap=10000,
             verbose=True,
