@@ -13,6 +13,7 @@ from typing import Optional
 
 from bake.sources._bucore3d import ParsedBuilding
 from bake.schema import Building, Polygon, Vertex
+from bake.normalize.classify import classify_inspire, classify_citygml
 
 
 def to_schema_building(parsed: ParsedBuilding) -> Optional[Building]:
