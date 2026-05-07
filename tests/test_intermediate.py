@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 
 from bake.intermediate import IntermediateStore
-from bake.schema import Building, Polygon, Vertex
+from bake.schema import Building, BuildingAttributes, Polygon, Vertex
 
 
 def _sample_building(source_id: str, lat: float = 50.1) -> Building:
@@ -15,6 +15,7 @@ def _sample_building(source_id: str, lat: float = 50.1) -> Building:
             Vertex(lat=lat + 0.001, lon=8.7, alt=100),
             Vertex(lat=lat, lon=8.7, alt=100),
         ])],
+        attributes=BuildingAttributes(building_class="unknown", raw={}),
     )
 
 

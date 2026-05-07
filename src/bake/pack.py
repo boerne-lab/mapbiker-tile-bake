@@ -24,7 +24,7 @@ def write_tile_file(*, out_dir: Path, state: str,
     Overwrites silently if the file already exists.
     """
     payload = Tile(
-        schema_version=1,
+        schema_version=2,
         state=state,
         tile=TileCoord(z=z, x=x, y=y),
         generated_at=datetime.now(timezone.utc).isoformat(),

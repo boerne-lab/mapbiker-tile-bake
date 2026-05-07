@@ -1,6 +1,6 @@
 import mercantile
 
-from bake.schema import Building, Polygon, Vertex
+from bake.schema import Building, BuildingAttributes, Polygon, Vertex
 from bake.retile import bin_buildings_by_z15_tile
 
 
@@ -16,6 +16,7 @@ def _building_at(lat: float, lon: float, source_id: str) -> Building:
             Vertex(lat=lat + 0.0001, lon=lon, alt=100),
             Vertex(lat=lat, lon=lon, alt=100),
         ])],
+        attributes=BuildingAttributes(building_class="unknown", raw={}),
     )
 
 

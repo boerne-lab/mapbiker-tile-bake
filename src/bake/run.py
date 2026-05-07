@@ -88,10 +88,14 @@ def _bake_state(state: str, out_dir: Path,
     else:
         raise ValueError(f"state not yet implemented: {state}")
 
+    # HE uses INSPIRE bu-core3d WFS → classify_inspire;
+    # BY uses CityGML → classify_citygml.
+    source_family = "citygml" if state == "by" else "inspire"
+
     n_parsed = 0
     n_binned = 0
     for parsed in parsed_iter:
-        b = to_schema_building(parsed)
+        b = to_schema_building(parsed, source=source_family)
         if b is None:
             continue
         n_parsed += 1

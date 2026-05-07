@@ -3,7 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from bake.schema import Building, Polygon, Vertex
+from bake.schema import Building, BuildingAttributes, Polygon, Vertex
 from bake.pack import write_tile_file
 
 
@@ -17,6 +17,7 @@ def _sample_building() -> Building:
             Vertex(lat=50.110, lon=8.683, alt=110),
             Vertex(lat=50.110, lon=8.682, alt=110),
         ])],
+        attributes=BuildingAttributes(building_class="unknown", raw={}),
     )
 
 
@@ -35,7 +36,7 @@ def test_writes_gzipped_json_with_correct_schema_version():
         # Inflate and decode
         with gzip.open(path, "rb") as f:
             decoded = json.loads(f.read())
-        assert decoded["schema_version"] == 1
+        assert decoded["schema_version"] == 2
         assert decoded["state"] == "de_he"
         assert decoded["tile"] == {"z": 15, "x": 17086, "y": 10958}
         assert len(decoded["buildings"]) == 1
