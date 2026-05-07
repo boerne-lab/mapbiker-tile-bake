@@ -143,3 +143,63 @@ def test_handles_citygml_1_0_namespace():
     assert 48.0 < lat < 48.3, f"lat {lat} not in München range"
     assert 11.4 < lon < 11.7, f"lon {lon} not in München range"
     assert alt == 516.71
+
+
+def test_parses_function():
+    fixture = b"""<?xml version="1.0"?>
+    <root xmlns:gml="http://www.opengis.net/gml"
+          xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
+          xmlns:core="http://www.opengis.net/citygml/2.0">
+      <bldg:Building gml:id="X1">
+        <bldg:function>31001_2010</bldg:function>
+        <bldg:storeysAboveGround>5</bldg:storeysAboveGround>
+        <bldg:measuredHeight>18.4</bldg:measuredHeight>
+        <bldg:yearOfConstruction>1985</bldg:yearOfConstruction>
+        <gml:LinearRing><gml:posList>691000 5334000 100 691010 5334000 100 691010 5334010 100 691000 5334000 100</gml:posList></gml:LinearRing>
+      </bldg:Building>
+    </root>
+    """
+    from io import BytesIO
+    from bake.sources._citygml2 import parse_citygml2_gml
+    parsed = list(parse_citygml2_gml(BytesIO(fixture)))
+    assert len(parsed) == 1
+    assert parsed[0].raw_attrs.get("function") == "31001_2010"
+    assert parsed[0].storeys == 5
+    assert parsed[0].height_m == 18.4
+    assert parsed[0].year_built == 1985
+
+
+def test_no_attrs_falls_back_to_none():
+    fixture = b"""<?xml version="1.0"?>
+    <root xmlns:gml="http://www.opengis.net/gml"
+          xmlns:bldg="http://www.opengis.net/citygml/building/1.0">
+      <bldg:Building gml:id="Y1">
+        <gml:LinearRing><gml:posList>691000 5334000 100 691010 5334000 100 691010 5334010 100 691000 5334000 100</gml:posList></gml:LinearRing>
+      </bldg:Building>
+    </root>
+    """
+    from io import BytesIO
+    from bake.sources._citygml2 import parse_citygml2_gml
+    parsed = list(parse_citygml2_gml(BytesIO(fixture)))
+    assert parsed[0].raw_attrs == {}
+    assert parsed[0].storeys is None
+    assert parsed[0].height_m is None
+    assert parsed[0].year_built is None
+
+
+def test_parses_function_via_v1_namespace():
+    """CityGML 1.0 (Bayernwolke) namespace must also resolve."""
+    fixture = b"""<?xml version="1.0"?>
+    <root xmlns:gml="http://www.opengis.net/gml"
+          xmlns:bldg="http://www.opengis.net/citygml/building/1.0"
+          xmlns:core="http://www.opengis.net/citygml/1.0">
+      <bldg:Building gml:id="V1_X">
+        <bldg:function>31007_X</bldg:function>
+        <gml:LinearRing><gml:posList>691000 5334000 0 691010 5334000 0 691010 5334010 0 691000 5334000 0</gml:posList></gml:LinearRing>
+      </bldg:Building>
+    </root>
+    """
+    from io import BytesIO
+    from bake.sources._citygml2 import parse_citygml2_gml
+    parsed = list(parse_citygml2_gml(BytesIO(fixture)))
+    assert parsed[0].raw_attrs.get("function") == "31007_X"

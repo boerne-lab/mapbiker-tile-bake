@@ -72,6 +72,16 @@ _TRANSFORMER = Transformer.from_crs(
 )
 
 
+def _extract_first_text(elem, tags: list[str]):
+    """Find first descendant matching any of the given (namespace-qualified) tags;
+    return text content or None."""
+    for tag in tags:
+        for child in elem.iter(tag):
+            if child.text:
+                return child.text.strip()
+    return None
+
+
 def _parse_pos_list_utm(text: str) -> Polygon:
     """Parse a CityGML <gml:posList> body. Coordinates are UTM32N
     (easting, northing, altitude) triples — transform to WGS84
@@ -131,8 +141,43 @@ def parse_citygml2_gml(stream: IO[bytes]) -> Iterator[ParsedBuilding]:
                     # rather than failing on one bad geometry.
                     continue
 
+        tag_function = [f"{{{NS_CITYGML_1['bldg']}}}function",
+                        f"{{{NS_CITYGML_2['bldg']}}}function"]
+        tag_storeys  = [f"{{{NS_CITYGML_1['bldg']}}}storeysAboveGround",
+                        f"{{{NS_CITYGML_2['bldg']}}}storeysAboveGround"]
+        tag_height   = [f"{{{NS_CITYGML_1['bldg']}}}measuredHeight",
+                        f"{{{NS_CITYGML_2['bldg']}}}measuredHeight"]
+        tag_year     = [f"{{{NS_CITYGML_1['bldg']}}}yearOfConstruction",
+                        f"{{{NS_CITYGML_2['bldg']}}}yearOfConstruction"]
+
+        raw_attrs: dict[str, str] = {}
+        if function := _extract_first_text(elem, tag_function):
+            raw_attrs["function"] = function
+
+        storeys = None
+        if storeys_str := _extract_first_text(elem, tag_storeys):
+            try: storeys = int(storeys_str)
+            except ValueError: pass
+
+        height_m = None
+        if height_str := _extract_first_text(elem, tag_height):
+            try: height_m = float(height_str)
+            except ValueError: pass
+
+        year_built = None
+        if year_str := _extract_first_text(elem, tag_year):
+            try: year_built = int(year_str)
+            except ValueError: pass
+
         if polygons:
-            yield ParsedBuilding(source_id=gml_id, polygons=polygons)
+            yield ParsedBuilding(
+                source_id=gml_id,
+                polygons=polygons,
+                raw_attrs=raw_attrs,
+                height_m=height_m,
+                storeys=storeys,
+                year_built=year_built,
+            )
 
         # Free the parsed Building sub-tree.
         elem.clear()
