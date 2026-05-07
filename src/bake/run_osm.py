@@ -74,10 +74,16 @@ def main() -> None:
     #                                    content_type, content_encoding)
     # OSM tiles are plain JSON (not gzip), so pass content_encoding=None.
     if not args.no_upload:
-        from bake.upload import upload_tile  # imported here to avoid early failures
+        from bake.upload import upload_tile, _remote_path_for  # imported here to avoid early failures
         for tile_path in out_dir.rglob("*.json"):
-            rel = tile_path.relative_to(Path(args.out))
-            remote_key = f"v1/osm/{rel.as_posix()}"
+            # out_dir structure: {out}/{state_full}/z{z}/{x}/{y}.json
+            remote_key = _remote_path_for(
+                state=state_full,
+                z=int(tile_path.parent.parent.name.lstrip("z")),
+                x=int(tile_path.parent.name),
+                y=int(tile_path.stem),
+                source_type="osm",
+            )
             upload_tile(
                 local_path=tile_path,
                 bucket=R2_BUCKET,

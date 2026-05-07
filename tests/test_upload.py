@@ -61,3 +61,22 @@ def test_upload_without_content_encoding():
     assert 'ContentEncoding' not in call_kwargs
 
     local_path.unlink()
+
+
+def test_remote_path_for_lod2_v2():
+    from bake.upload import _remote_path_for
+    p = _remote_path_for(state="de_he", z=15, x=100, y=200, source_type="lod2")
+    assert p == "v2/lod2/de_he/z15/100/200.json"
+
+
+def test_remote_path_for_osm_v1():
+    from bake.upload import _remote_path_for
+    p = _remote_path_for(state="de_he", z=15, x=100, y=200, source_type="osm")
+    assert p == "v1/osm/de_he/z15/100/200.json"
+
+
+def test_remote_path_for_unknown_source_type_raises():
+    from bake.upload import _remote_path_for
+    import pytest
+    with pytest.raises(ValueError):
+        _remote_path_for(state="de_he", z=15, x=100, y=200, source_type="invalid")

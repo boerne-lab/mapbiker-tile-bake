@@ -25,7 +25,7 @@ from bake.intermediate import IntermediateStore
 from bake.normalize import to_schema_building
 from bake.pack import write_tile_file
 from bake.sources import hessen
-from bake.upload import upload_tile
+from bake.upload import upload_tile, _remote_path_for
 
 # State bbox: (min_lat, min_lon, max_lat, max_lon).
 # Approximate; intersected with state-boundary at fetch time if
@@ -129,9 +129,11 @@ def _bake_state(state: str, out_dir: Path,
             source_dataset_version=source_version,
         )
         if do_upload:
-            rel = p.relative_to(out_dir).as_posix()
             upload_tile(
-                local_path=p, bucket=R2_BUCKET, remote_key=rel,
+                local_path=p, bucket=R2_BUCKET,
+                remote_key=_remote_path_for(
+                    state=state_code, z=z, x=x, y=y, source_type="lod2",
+                ),
             )
         # Free intermediate disk space progressively as each tile
         # is finalised — keeps peak disk usage tighter.
