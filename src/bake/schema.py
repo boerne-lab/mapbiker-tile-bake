@@ -1,9 +1,10 @@
-"""Canonical wire-format schema for tile-format-v1.
-
-Mirrors the iOS Codable types defined in R2HostedLoD2Adapter.swift —
-keep both in lock-step when the schema evolves (v2, etc.).
+"""Canonical wire-format schema. v2 adds BuildingAttributes (class,
+height, storeys, year, raw) — see classify.py + classify_osm.py for
+class-resolution. v1 stays available conceptually via /v1/lod2/ URLs
+(no schema validation for it here); this module is the v2 single
+source of truth.
 """
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -15,13 +16,22 @@ class Vertex(BaseModel):
 
 class Polygon(BaseModel):
     vertices: list[Vertex] = Field(min_length=4)
-    # min_length=4 because a closed ring on a 3-point footprint has
-    # 4 vertices (first == last).
+
+
+class BuildingAttributes(BaseModel):
+    building_class: Literal["residential", "commercial", "industrial",
+                            "civic", "religious", "agricultural",
+                            "historic", "unknown"]
+    measured_height_m: Optional[float] = None
+    storeys_above_ground: Optional[int] = None
+    year_of_construction: Optional[int] = None
+    raw: dict[str, str] = Field(default_factory=dict)
 
 
 class Building(BaseModel):
     source_id: str
     polygons: list[Polygon] = Field(min_length=1)
+    attributes: BuildingAttributes
 
 
 class TileCoord(BaseModel):
@@ -31,7 +41,7 @@ class TileCoord(BaseModel):
 
 
 class Tile(BaseModel):
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     state: Literal["de_by", "de_nw", "de_he"]
     tile: TileCoord
     generated_at: str
