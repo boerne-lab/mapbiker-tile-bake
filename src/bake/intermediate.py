@@ -15,6 +15,9 @@ Phase 2 (max few thousand, ~MB scale).
 The append-mode JSON-lines format means a single building can be added
 in O(1) without reading the whole file. Phase 2 reads each file once
 to build the final Tile.
+
+OSM-Pipeline (run_osm.py) does in-memory binning via osm_pbf._Handler
+— this module is LoD2-specific.
 """
 from __future__ import annotations
 
