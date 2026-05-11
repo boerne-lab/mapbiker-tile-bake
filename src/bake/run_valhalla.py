@@ -44,6 +44,7 @@ from bake.valhalla_tiles import (
     DEFAULT_VALHALLA_IMAGE,
     GEOFABRIK_PBF_URLS,
     BundleManifest,
+    build_tiles_native,
     build_tiles_via_docker,
     package_bundle,
     write_manifest,
@@ -78,8 +79,17 @@ def main(argv: list[str] | None = None) -> int:
              "Defaults to data/tiled/v1/valhalla/<region>.",
     )
     parser.add_argument(
+        "--mode", default="native", choices=("native", "docker"),
+        help="How to invoke valhalla_build_tiles. 'native' calls the "
+             "binary directly (needs valhalla-bin on PATH — apt on "
+             "Linux/WSL2, `brew install valhalla` on macOS). 'docker' "
+             "uses ghcr.io/valhalla/valhalla:run-latest (no host-side "
+             "valhalla install needed).",
+    )
+    parser.add_argument(
         "--docker-image", default=DEFAULT_VALHALLA_IMAGE,
-        help=f"Valhalla container tag (default {DEFAULT_VALHALLA_IMAGE}).",
+        help=f"Valhalla container tag (default {DEFAULT_VALHALLA_IMAGE}). "
+             f"Only used when --mode docker.",
     )
     parser.add_argument(
         "--cores", type=int, default=4,
@@ -110,13 +120,19 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[run_valhalla] work_dir={work_dir} out_dir={out_dir}")
 
     if not args.no_build:
-        print(f"[run_valhalla] STEP 1/3 docker build (this is the long pole)")
-        build_tiles_via_docker(
-            pbf_urls=GEOFABRIK_PBF_URLS[region],
-            work_dir=work_dir,
-            image=args.docker_image,
-            cores=args.cores,
-        )
+        print(f"[run_valhalla] STEP 1/3 build tiles ({args.mode} mode)")
+        if args.mode == "native":
+            build_tiles_native(
+                pbf_urls=GEOFABRIK_PBF_URLS[region],
+                work_dir=work_dir,
+            )
+        else:
+            build_tiles_via_docker(
+                pbf_urls=GEOFABRIK_PBF_URLS[region],
+                work_dir=work_dir,
+                image=args.docker_image,
+                cores=args.cores,
+            )
     else:
         print(f"[run_valhalla] STEP 1/3 SKIPPED (--no-build)")
 

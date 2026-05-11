@@ -60,6 +60,7 @@ import json
 import shutil
 import subprocess
 import tarfile
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,6 +108,114 @@ class BundleManifest:
             "uncompressedBytes": self.uncompressed_bytes,
             "createdAt": self.created_at,
         }, indent=2)
+
+
+def download_pbf(*, url: str, dest_path: Path) -> Path:
+    """Download a single OSM PBF from `url` to `dest_path`.
+    Idempotent: skips when the destination file already exists with
+    non-zero size (re-runs are cheap, no checksum check — we trust
+    Geofabrik). Streamed download so we don't load multi-GB PBFs
+    into memory."""
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if dest_path.exists() and dest_path.stat().st_size > 0:
+        print(f"[valhalla_tiles] cached PBF {dest_path.name}")
+        return dest_path
+    print(f"[valhalla_tiles] downloading {url} -> {dest_path}")
+    tmp = dest_path.with_suffix(dest_path.suffix + ".part")
+    with urllib.request.urlopen(url) as resp:
+        with open(tmp, "wb") as f:
+            shutil.copyfileobj(resp, f, length=1024 * 1024)
+    tmp.replace(dest_path)
+    return dest_path
+
+
+def generate_valhalla_config(
+    *,
+    work_dir: Path,
+    tile_dir: Path,
+    config_path: Path | None = None,
+) -> Path:
+    """Generate a valhalla.json config by invoking the `valhalla_build_config`
+    CLI. Returns the path of the written config.
+
+    `valhalla_build_config` ships with the Debian/Homebrew valhalla
+    packages (and is also inside the container). Output is a JSON
+    structure with sensible defaults for routing — we override only
+    `mjolnir.tile_dir` to point at our per-region tiles directory.
+    """
+    config_path = config_path or (work_dir / "valhalla.json")
+    work_dir.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        [
+            "valhalla_build_config",
+            "--mjolnir-tile-dir", str(tile_dir),
+            "--mjolnir-timezone", str(tile_dir / "timezones.sqlite"),
+            "--mjolnir-admin", str(tile_dir / "admins.sqlite"),
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"valhalla_build_config failed ({proc.returncode}): " +
+            proc.stderr[:400])
+    config_path.write_text(proc.stdout)
+    return config_path
+
+
+def build_tiles_native(
+    *,
+    pbf_urls: Iterable[str],
+    work_dir: Path,
+    config_path: Path | None = None,
+) -> Path:
+    """Build Valhalla tiles using the native `valhalla_build_tiles`
+    binary (from Homebrew on macOS, or `valhalla-bin` apt package on
+    Linux / WSL2). No Docker needed.
+
+    Layout in `work_dir` after success:
+      - `<region>-pbfs/` containing the downloaded `.osm.pbf` files
+      - `valhalla_tiles/` containing per-level `.gph` files
+      - `valhalla.json` Valhalla routing config
+    """
+    work_dir.mkdir(parents=True, exist_ok=True)
+    pbf_dir = work_dir / "pbfs"
+    pbf_dir.mkdir(exist_ok=True)
+    tiles_dir = work_dir / "valhalla_tiles"
+    tiles_dir.mkdir(exist_ok=True)
+
+    pbf_paths: list[Path] = []
+    for url in pbf_urls:
+        filename = url.rsplit("/", 1)[-1]
+        path = download_pbf(url=url, dest_path=pbf_dir / filename)
+        pbf_paths.append(path)
+
+    resolved_config = generate_valhalla_config(
+        work_dir=work_dir,
+        tile_dir=tiles_dir,
+        config_path=config_path,
+    )
+
+    print(f"[valhalla_tiles] valhalla_build_tiles begin "
+          f"(work_dir={work_dir}, {len(pbf_paths)} PBFs)")
+    # `valhalla_build_tiles -c <config> <pbf1> <pbf2> ...` is the
+    # full build pipeline (initial-graph → hierarchy → transitions →
+    # restrictions → admins). Single-pass; no resume support.
+    args = ["valhalla_build_tiles", "-c", str(resolved_config)]
+    args.extend(str(p) for p in pbf_paths)
+    proc = subprocess.run(args, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"valhalla_build_tiles exited with code {proc.returncode}")
+
+    if not any(tiles_dir.iterdir()):
+        raise RuntimeError(
+            f"valhalla_build_tiles produced no output in {tiles_dir}")
+    # Move the config to the canonical name `config.json` expected
+    # by the iOS-side packager + matcher.
+    canonical = work_dir / "config.json"
+    if resolved_config != canonical:
+        shutil.copyfile(resolved_config, canonical)
+    return tiles_dir
 
 
 def build_tiles_via_docker(
