@@ -87,10 +87,13 @@ GEOFABRIK_PBF_URLS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Default Valhalla container. The upstream tags `latest`,
-# `latest-amd64`, `latest-arm64` are the curated images with
-# prebuilt binaries. `latest` is multi-arch and the right pick.
-DEFAULT_VALHALLA_IMAGE = "ghcr.io/valhalla/valhalla:latest"
+# Default Valhalla container. The `nilsnolde/docker-valhalla`
+# community image (now under gis-ops umbrella) is the one with
+# the `tile_urls` env-var auto-download orchestration + the
+# `serve_tiles=False` clean-exit-after-build mode. The official
+# `ghcr.io/valhalla/valhalla` image is a base image without that
+# orchestration — drop PBFs into the volume manually if you use it.
+DEFAULT_VALHALLA_IMAGE = "ghcr.io/nilsnolde/docker-valhalla/valhalla:latest"
 
 
 @dataclass(frozen=True)
