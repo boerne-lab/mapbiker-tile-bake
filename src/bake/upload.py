@@ -14,6 +14,7 @@ development). The four required env vars are:
 """
 from __future__ import annotations
 
+import gzip
 import os
 from pathlib import Path
 
@@ -37,6 +38,16 @@ def _remote_path_for(*, state: str, z: int, x: int, y: int,
     elif source_type == "osm":
         return f"v1/osm/{state}/z{z}/{x}/{y}.json"
     raise ValueError(f"unknown source_type: {source_type}")
+
+
+def _remote_path_for_dgm(*, state: str) -> str:
+    """Build R2 remote key for a per-Bundesland DGM200 binary.
+
+    DGM200 uses /v1/dgm/{state}.bin (one file per state, not tiled).
+    The bake produces an uncompressed DGM2 binary; upload sets
+    `Content-Encoding: gzip` so the file is gzipped on the wire.
+    """
+    return f"v1/dgm/{state}.bin"
 
 
 def _get_s3_client():
@@ -79,3 +90,25 @@ def upload_tile(*, local_path: Path, bucket: str, remote_key: str,
             Body=f.read(),
             **extra_args,
         )
+
+
+def upload_dgm_binary(*, local_path: Path, bucket: str, state: str) -> None:
+    """Upload a DGM2 v1 state binary to `bucket` at `v1/dgm/{state}.bin`.
+
+    The local file is uncompressed; this function gzips it in-memory
+    before uploading and sets `Content-Encoding: gzip` so URLSession /
+    curl auto-inflates on the receiving side. DGM200 elevation data
+    compresses ~50-70% via gzip (smooth field), so wire size is
+    typically ~1-2 MB for Hessen / Bayern even though the raw binary
+    is ~2-4 MB.
+    """
+    s3 = _get_s3_client()
+    raw = local_path.read_bytes()
+    compressed = gzip.compress(raw, compresslevel=9)
+    s3.put_object(
+        Bucket=bucket,
+        Key=_remote_path_for_dgm(state=state),
+        Body=compressed,
+        ContentType='application/octet-stream',
+        ContentEncoding='gzip',
+    )

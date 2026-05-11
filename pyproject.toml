@@ -7,11 +7,13 @@ dependencies = [
     "boto3>=1.43",
     "lxml>=5.3",
     "mercantile>=1.2",
+    "numpy>=2.0",
     "osmium>=3.7",
     "pydantic>=2.9",
     "pyogrio>=0.10",
     "pyproj>=3.7",
     "python-dotenv>=1.0",
+    "rasterio>=1.4",
     "requests>=2.32",
     "shapely>=2.0",
 ]
