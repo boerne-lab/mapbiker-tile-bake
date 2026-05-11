@@ -1,0 +1,87 @@
+# Docker Compose for the Valhalla DACH-cycling tile bake.
+#
+# Targets a small Linux server (or any Docker host). Runs the
+# public `ghcr.io/valhalla/valhalla:run-latest` image — no auth
+# required for the pull. The container auto-downloads the three
+# DACH PBFs from Geofabrik on first start, builds tiles, then
+# stays up as a routing server (you can stop it with `docker compose
+# down` once the build is complete and you have the output dir).
+#
+# Workflow:
+#   1. On the server: place this file in an empty directory.
+#   2. `docker compose -f docker-compose.valhalla.yaml up -d`
+#   3. Tail logs: `docker compose -f docker-compose.valhalla.yaml logs -f valhalla`
+#      Wait for "Build complete" / similar from the container's
+#      entrypoint. Expect 30–60 min on modest hardware.
+#   4. `docker compose -f docker-compose.valhalla.yaml stop` (keeps
+#      the named volume; data stays on disk).
+#   5. The output landed at `./data/valhalla_tiles/` + `./data/valhalla.json`
+#      on the host.
+#   6. On the server (or wherever has the bake-repo Python env):
+#         python -m bake.run_valhalla --region dach --bundle-version 1 \
+#             --no-build --work-dir ./data
+#      This runs only STEPS 2/3 + 3/3 (package + upload), skipping
+#      the build that the container already did.
+#
+# Output paths on host:
+#   ./data/pbfs/                  downloaded PBFs (germany / austria / switzerland)
+#   ./data/valhalla_tiles/        the per-level .gph routing tiles
+#   ./data/valhalla.json          Valhalla config used for the build
+#
+# Stopping vs removing:
+#   `docker compose stop`    — container halts, data + image stay
+#   `docker compose down`    — container removed; ./data volume PERSISTS
+#                              (it's a bind-mount, not an anonymous volume)
+#   `rm -rf ./data`          — wipes the work dir if you want to re-bake from scratch
+#
+# Memory: DACH cycling peak ~12–16 GB RAM during the hierarchy build.
+# On a 4-GB server this will OOM or swap to glacial speeds. 8+ GB
+# recommended; 16+ GB ideal.
+
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla:run-latest
+    container_name: valhalla-bake
+    # Bind-mount instead of named volume so the host can directly
+    # inspect / move the output without running a docker cp step.
+    volumes:
+      - ./data:/custom_files
+    environment:
+      # The container's run.sh entrypoint downloads any URLs listed
+      # here into /custom_files on first start, generates a Valhalla
+      # config, and runs valhalla_build_tiles. Subsequent restarts
+      # skip the download + build if the output is already present.
+      tile_urls: "https://download.geofabrik.de/europe/germany-latest.osm.pbf,https://download.geofabrik.de/europe/austria-latest.osm.pbf,https://download.geofabrik.de/europe/switzerland-latest.osm.pbf"
+      # Number of worker threads inside the container. Set to the
+      # server's physical core count for fastest build. Note that
+      # the hierarchy-build stage near the end of the pipeline is
+      # mostly single-threaded — you'll see CPU usage drop there.
+      server_threads: "4"
+      # Skip the elevation tile fetch — we only need routing graph
+      # tiles, not the per-edge elevation data. Saves ~1 hour +
+      # several GB.
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      # Don't auto-re-build if a previous build is already on disk.
+      # Set to "True" if you want to force a fresh bake.
+      force_rebuild: "False"
+      force_rebuild_elevation: "False"
+      use_tiles_ignore_pbf: "False"
+      # The image's entrypoint defaults to launching valhalla_service
+      # AFTER the build finishes. We don't need the service — only
+      # the tile output. The build runs before service start either
+      # way, so listening on the default port 8002 is harmless.
+      serve_tiles: "True"
+    # Restart policy "no" so the container exits cleanly when stopped
+    # and doesn't auto-restart on host reboot. Re-running a build is
+    # a deliberate action.
+    restart: "no"
+    # Healthcheck — optional, lets you `docker compose ps` show
+    # readiness once the build finishes and the service is up.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
