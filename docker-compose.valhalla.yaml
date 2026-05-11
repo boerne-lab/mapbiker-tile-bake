@@ -59,7 +59,7 @@
 
 services:
   valhalla:
-    image: ghcr.io/valhalla/valhalla:run-latest
+    image: ghcr.io/valhalla/valhalla:latest
     container_name: valhalla-bake
     volumes:
       - ./data:/custom_files

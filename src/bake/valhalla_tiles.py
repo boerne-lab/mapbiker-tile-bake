@@ -78,10 +78,10 @@ GEOFABRIK_PBF_URLS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Default Valhalla container. `run-latest` is the curated stable
-# tag with prebuilt binaries; the `latest` tag is the upstream HEAD
-# which sometimes ships breaking config changes mid-week.
-DEFAULT_VALHALLA_IMAGE = "ghcr.io/valhalla/valhalla:run-latest"
+# Default Valhalla container. The upstream tags `latest`,
+# `latest-amd64`, `latest-arm64` are the curated images with
+# prebuilt binaries. `latest` is multi-arch and the right pick.
+DEFAULT_VALHALLA_IMAGE = "ghcr.io/valhalla/valhalla:latest"
 
 
 @dataclass(frozen=True)
