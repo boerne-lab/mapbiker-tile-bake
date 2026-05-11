@@ -25,6 +25,17 @@ class BuildingAttributes(BaseModel):
     measured_height_m: Optional[float] = None
     storeys_above_ground: Optional[int] = None
     year_of_construction: Optional[int] = None
+    # Canonical roof type. Normalised across sources by `bake.normalize`
+    # from either an ALKIS numeric code (Bayern / NRW CityGML) or an
+    # INSPIRE `RoofTypeValue` codelist leaf (Hessen / other INSPIRE
+    # states when they start publishing it). Optional because most
+    # current sources don't emit it (HE WFS) or omit it on individual
+    # buildings.
+    #
+    # Valid values: "flat", "monopitch", "gable", "hip", "halfHip",
+    # "pyramid", "mansard", "mansardHip", "sawtooth", "dome",
+    # "steeple", "arched", "other".
+    roof_type: Optional[str] = None
     raw: dict[str, str] = Field(default_factory=dict)
 
 

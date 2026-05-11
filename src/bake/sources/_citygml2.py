@@ -149,10 +149,16 @@ def parse_citygml2_gml(stream: IO[bytes]) -> Iterator[ParsedBuilding]:
                         f"{{{NS_CITYGML_2['bldg']}}}measuredHeight"]
         tag_year     = [f"{{{NS_CITYGML_1['bldg']}}}yearOfConstruction",
                         f"{{{NS_CITYGML_2['bldg']}}}yearOfConstruction"]
+        tag_roof     = [f"{{{NS_CITYGML_1['bldg']}}}roofType",
+                        f"{{{NS_CITYGML_2['bldg']}}}roofType"]
 
         raw_attrs: dict[str, str] = {}
         if function := _extract_first_text(elem, tag_function):
             raw_attrs["function"] = function
+        # roofType: numeric ALKIS code (1000=flat, 3100=gable, etc.).
+        # Normalised to a canonical RoofType string by `bake.normalize`.
+        if roof_raw := _extract_first_text(elem, tag_roof):
+            raw_attrs["roofType"] = roof_raw
 
         storeys = None
         if storeys_str := _extract_first_text(elem, tag_storeys):

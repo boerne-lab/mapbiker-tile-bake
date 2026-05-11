@@ -86,6 +86,21 @@ def _extract_attrs(elem) -> tuple[dict[str, str], Optional[float]]:
             raw["buildingNature"] = leaf
             break
 
+    # roofType: optional in INSPIRE bu-base 4.0. Hessen WFS currently
+    # doesn't emit it (verified against `inspire-bu-core3d-frankfurt.xml`
+    # fixture, 2026-05-11), so this branch is a no-op for HE today.
+    # Leaving the extraction wired so the day another state adds the
+    # property we pick it up without a code change. INSPIRE values are
+    # RoofTypeValue codelist leaves like "flat" / "gable" / "hip" —
+    # `bake.normalize` maps them to the same canonical strings as the
+    # ALKIS numeric codes from CityGML.
+    for rt in elem.iter(f"{{{NS['bu-base']}}}roofType"):
+        href = rt.get(href_attr)
+        leaf = _extract_codelist_leaf(href)
+        if leaf:
+            raw["roofType"] = leaf
+            break
+
     # heightAboveGround.value
     for v in elem.iter(f"{{{NS['bu-base']}}}value"):
         parent = v.getparent()
