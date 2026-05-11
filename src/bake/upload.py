@@ -145,3 +145,56 @@ def upload_dgm10_tile(
         ContentType='application/octet-stream',
         ContentEncoding='gzip',
     )
+
+
+def upload_valhalla_bundle(
+    *, local_path: Path, bucket: str, region: str, bundle_version: int,
+) -> None:
+    """Upload a packaged Valhalla tile bundle to
+    `bucket/v1/valhalla/{region}/tiles-v{N}.tar.gz`.
+
+    The file is ALREADY gzipped (the bake's `package_bundle`
+    writes a .tar.gz). We upload it as-is with `Content-Type:
+    application/gzip` and no `Content-Encoding` — clients like
+    URLSession (and curl --output) should write the response body
+    untouched to disk so the on-disk file matches the SHA-256 the
+    manifest pinned.
+
+    For a typical DACH-cycling bundle (~1.5 GB compressed) this
+    takes 5–10 min over a home connection. boto3 chunks the upload
+    via its multipart-upload threshold automatically.
+    """
+    s3 = _get_s3_client()
+    key = f"v1/valhalla/{region}/tiles-v{bundle_version}.tar.gz"
+    s3.upload_file(
+        Filename=str(local_path),
+        Bucket=bucket,
+        Key=key,
+        ExtraArgs={
+            "ContentType": "application/gzip",
+        },
+    )
+
+
+def upload_valhalla_manifest(
+    *, local_path: Path, bucket: str, region: str,
+) -> None:
+    """Upload the manifest JSON to
+    `bucket/v1/valhalla/{region}/manifest.json`.
+
+    iOS reads this small file (~300 B) at app launch to decide
+    whether to fetch a new bundle. JSON, gzipped on the wire for
+    cleanliness with the rest of our static-asset shelf — even
+    though the saving is meaningless at this size.
+    """
+    s3 = _get_s3_client()
+    key = f"v1/valhalla/{region}/manifest.json"
+    raw = local_path.read_bytes()
+    compressed = gzip.compress(raw, compresslevel=9)
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=compressed,
+        ContentType="application/json",
+        ContentEncoding="gzip",
+    )
