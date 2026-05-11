@@ -32,6 +32,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/bake"]
 
+# Editable installs need an explicit src→runtime mapping so
+# `pip install -e .` puts `bake` on sys.path. Without this,
+# hatchling's editable hook only registers the project metadata
+# and `python -m bake.X` fails with "No module named 'bake'"
+# (only `pytest` works, because its own config below adds
+# src/ to pythonpath separately).
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
