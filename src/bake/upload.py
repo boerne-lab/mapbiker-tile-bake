@@ -50,6 +50,16 @@ def _remote_path_for_dgm(*, state: str) -> str:
     return f"v1/dgm/{state}.bin"
 
 
+def _remote_path_for_dgm10(*, state: str, z: int, x: int, y: int) -> str:
+    """Build R2 remote key for a per-z15-tile DGM10 binary.
+
+    DGM10 uses /v1/dgm10/{state}/z{z}/{x}/{y}.bin — per-tile, mirrors
+    the LoD2 and OSM tile layouts so the iOS adapter can share its
+    RawSourceCache infrastructure.
+    """
+    return f"v1/dgm10/{state}/z{z}/{x}/{y}.bin"
+
+
 def _get_s3_client():
     """Build a boto3 S3 client pointing at R2.
 
@@ -108,6 +118,29 @@ def upload_dgm_binary(*, local_path: Path, bucket: str, state: str) -> None:
     s3.put_object(
         Bucket=bucket,
         Key=_remote_path_for_dgm(state=state),
+        Body=compressed,
+        ContentType='application/octet-stream',
+        ContentEncoding='gzip',
+    )
+
+
+def upload_dgm10_tile(
+    *, local_path: Path, bucket: str,
+    state: str, z: int, x: int, y: int,
+) -> None:
+    """Upload a per-z15-tile DGM10 binary to
+    `bucket/v1/dgm10/{state}/z{z}/{x}/{y}.bin`.
+
+    Same gzip-in-memory + `Content-Encoding: gzip` pattern as the
+    state-wide DGM200 upload. A per-tile DGM10 binary is ~20 KB
+    uncompressed → ~10 KB on the wire.
+    """
+    s3 = _get_s3_client()
+    raw = local_path.read_bytes()
+    compressed = gzip.compress(raw, compresslevel=9)
+    s3.put_object(
+        Bucket=bucket,
+        Key=_remote_path_for_dgm10(state=state, z=z, x=x, y=y),
         Body=compressed,
         ContentType='application/octet-stream',
         ContentEncoding='gzip',
