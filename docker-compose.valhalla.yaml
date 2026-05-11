@@ -1,87 +1,127 @@
-# Docker Compose for the Valhalla DACH-cycling tile bake.
+# Single-file Docker Compose for the full Valhalla DACH-cycling
+# tile bake. Two services chained:
 #
-# Targets a small Linux server (or any Docker host). Runs the
-# public `ghcr.io/valhalla/valhalla:run-latest` image — no auth
-# required for the pull. The container auto-downloads the three
-# DACH PBFs from Geofabrik on first start, builds tiles, then
-# stays up as a routing server (you can stop it with `docker compose
-# down` once the build is complete and you have the output dir).
+#   1. valhalla      — auto-downloads PBFs from Geofabrik, runs
+#                      valhalla_build_tiles, exits cleanly. Uses
+#                      ghcr.io/valhalla/valhalla:run-latest (public).
 #
-# Workflow:
-#   1. On the server: place this file in an empty directory.
-#   2. `docker compose -f docker-compose.valhalla.yaml up -d`
-#   3. Tail logs: `docker compose -f docker-compose.valhalla.yaml logs -f valhalla`
-#      Wait for "Build complete" / similar from the container's
-#      entrypoint. Expect 30–60 min on modest hardware.
-#   4. `docker compose -f docker-compose.valhalla.yaml stop` (keeps
-#      the named volume; data stays on disk).
-#   5. The output landed at `./data/valhalla_tiles/` + `./data/valhalla.json`
-#      on the host.
-#   6. On the server (or wherever has the bake-repo Python env):
-#         python -m bake.run_valhalla --region dach --bundle-version 1 \
-#             --no-build --work-dir ./data
-#      This runs only STEPS 2/3 + 3/3 (package + upload), skipping
-#      the build that the container already did.
+#   2. packager      — Python container that runs AFTER valhalla
+#                      exits successfully. Clones the bake-repo,
+#                      installs it, runs `bake.run_valhalla
+#                      --no-build` to tar+gzip the tile output,
+#                      compute SHA-256, write manifest.json, and
+#                      upload both to R2. Reads R2 creds from .env.
 #
-# Output paths on host:
-#   ./data/pbfs/                  downloaded PBFs (germany / austria / switzerland)
-#   ./data/valhalla_tiles/        the per-level .gph routing tiles
-#   ./data/valhalla.json          Valhalla config used for the build
+# # Setup (one-time on the server)
 #
-# Stopping vs removing:
-#   `docker compose stop`    — container halts, data + image stay
-#   `docker compose down`    — container removed; ./data volume PERSISTS
-#                              (it's a bind-mount, not an anonymous volume)
-#   `rm -rf ./data`          — wipes the work dir if you want to re-bake from scratch
+#   1. Copy this file + a `.env` into an empty directory.
+#   2. The `.env` needs the five R2_* variables — see `.env.example`
+#      in the bake-repo, or fill it from your existing Windows .env.
 #
-# Memory: DACH cycling peak ~12–16 GB RAM during the hierarchy build.
-# On a 4-GB server this will OOM or swap to glacial speeds. 8+ GB
-# recommended; 16+ GB ideal.
+# # Run
+#
+#   docker compose -f docker-compose.valhalla.yaml up -d
+#   docker compose -f docker-compose.valhalla.yaml logs -f
+#
+# Wall time: ~45–90 min depending on hardware + uplink. Watch the
+# packager logs near the end — last line should be
+# "[run_valhalla] done." with the bundle + manifest URLs.
+#
+# # Re-runs
+#
+# After a successful run, the output stays in ./data/. To re-bake
+# (e.g. fresher OSM extracts, bumped bundle version):
+#
+#   1. `rm -rf ./data`             # nuke previous output
+#   2. Edit BUNDLE_VERSION below   # bump from 1 to 2 etc.
+#   3. `docker compose -f docker-compose.valhalla.yaml up -d`
+#
+# # Output paths
+#
+# On the host after success:
+#   ./data/valhalla_tiles/                       per-level .gph files (~2.5 GB)
+#   ./data/valhalla.json                         routing config
+#   ./data/tiled/v1/valhalla/dach/tiles-v1.tar.gz  packaged bundle
+#   ./data/tiled/v1/valhalla/dach/manifest.json    bundle metadata
+#
+# On R2 after success:
+#   v1/valhalla/dach/tiles-v1.tar.gz             the bundle
+#   v1/valhalla/dach/manifest.json               the manifest
+#
+# iOS `ValhallaTileStore` fetches the manifest first, compares
+# `bundleVersion`, and downloads the bundle if newer than installed.
+#
+# # Memory + disk
+#
+# Peak ~12–16 GB RAM during the hierarchy-build stage of valhalla.
+# 4-GB hosts will OOM; 8+ GB recommended; 16+ GB ideal. Disk needs
+# ~15 GB free (PBFs ~5 GB + tiles ~2.5 GB + tar ~1.5 GB + slack).
 
 services:
   valhalla:
     image: ghcr.io/valhalla/valhalla:run-latest
     container_name: valhalla-bake
-    # Bind-mount instead of named volume so the host can directly
-    # inspect / move the output without running a docker cp step.
     volumes:
       - ./data:/custom_files
     environment:
-      # The container's run.sh entrypoint downloads any URLs listed
-      # here into /custom_files on first start, generates a Valhalla
-      # config, and runs valhalla_build_tiles. Subsequent restarts
-      # skip the download + build if the output is already present.
       tile_urls: "https://download.geofabrik.de/europe/germany-latest.osm.pbf,https://download.geofabrik.de/europe/austria-latest.osm.pbf,https://download.geofabrik.de/europe/switzerland-latest.osm.pbf"
-      # Number of worker threads inside the container. Set to the
-      # server's physical core count for fastest build. Note that
-      # the hierarchy-build stage near the end of the pipeline is
-      # mostly single-threaded — you'll see CPU usage drop there.
+      # Number of worker threads. Set to your server's physical
+      # core count for fastest build; the late hierarchy-build
+      # stage is mostly single-threaded so don't over-spec.
       server_threads: "4"
-      # Skip the elevation tile fetch — we only need routing graph
-      # tiles, not the per-edge elevation data. Saves ~1 hour +
-      # several GB.
+      # Skip per-edge elevation data — adds ~1 h + several GB and
+      # the iOS matcher doesn't need it for snap-to-road.
       build_elevation: "False"
       build_admins: "True"
       build_time_zones: "True"
-      # Don't auto-re-build if a previous build is already on disk.
-      # Set to "True" if you want to force a fresh bake.
+      # Use existing tiles if present (idempotent re-runs).
       force_rebuild: "False"
       force_rebuild_elevation: "False"
       use_tiles_ignore_pbf: "False"
-      # The image's entrypoint defaults to launching valhalla_service
-      # AFTER the build finishes. We don't need the service — only
-      # the tile output. The build runs before service start either
-      # way, so listening on the default port 8002 is harmless.
-      serve_tiles: "True"
-    # Restart policy "no" so the container exits cleanly when stopped
-    # and doesn't auto-restart on host reboot. Re-running a build is
-    # a deliberate action.
+      # CRITICAL: tells run.sh to exit after build instead of
+      # staying up as a routing server. Without this the container
+      # never reaches `service_completed_successfully` and the
+      # packager step never starts.
+      serve_tiles: "False"
     restart: "no"
-    # Healthcheck — optional, lets you `docker compose ps` show
-    # readiness once the build finishes and the service is up.
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8002/status"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5m
+
+  packager:
+    image: python:3.12-slim
+    container_name: valhalla-packager
+    depends_on:
+      valhalla:
+        # Compose v2.2+: only start packager AFTER valhalla exits
+        # with code 0. If valhalla fails, packager is skipped.
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/work
+    env_file:
+      - .env
+    working_dir: /app
+    # The packager needs git (to clone the bake-repo) + the Python
+    # deps. Both installed at container start — adds ~30 s to the
+    # total runtime, but keeps the compose self-contained (no
+    # Dockerfile, no pre-built image to maintain).
+    command:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        echo "[packager] installing tooling..."
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends git ca-certificates
+        echo "[packager] cloning bake-repo..."
+        git clone --depth=1 \
+          https://github.com/boerne-lab/mapbiker-tile-bake.git /app
+        cd /app
+        echo "[packager] installing python deps..."
+        pip install --no-cache-dir --upgrade pip
+        pip install --no-cache-dir -e .
+        echo "[packager] running package + upload step..."
+        python -m bake.run_valhalla \
+          --region dach \
+          --bundle-version 1 \
+          --no-build \
+          --work-dir /work
+        echo "[packager] done."
+    restart: "no"
