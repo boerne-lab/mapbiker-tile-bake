@@ -71,6 +71,15 @@ from typing import Iterable
 # pinning a checksum here is overkill — the manifest covers
 # downstream verification.
 GEOFABRIK_PBF_URLS: dict[str, tuple[str, ...]] = {
+    # Germany-only — fits in 7-8 GB RAM peak, runnable on GitHub
+    # free `ubuntu-latest` runner. Default region for the cloud
+    # bake until we have a memory-budgeted plan for DACH.
+    "de": (
+        "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
+    ),
+    # DACH — DE + AT + CH. Peaks ~12-16 GB RAM during hierarchy
+    # build, needs a larger runner OR pre-filtered cycling-only
+    # PBFs via osmium.
     "dach": (
         "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
         "https://download.geofabrik.de/europe/austria-latest.osm.pbf",
@@ -250,9 +259,16 @@ def build_tiles_via_docker(
         "--rm",
         "-e", f"tile_urls={tile_urls}",
         "-e", f"build_tar=False",
+        "-e", f"build_elevation=False",
+        "-e", f"build_admins=True",
+        "-e", f"build_time_zones=True",
         "-e", f"force_rebuild=False",
         "-e", f"force_rebuild_elevation=False",
         "-e", f"use_tiles_ignore_pbf=False",
+        # CRITICAL: without this the container's run.sh stays up as
+        # a routing server after the build, and our subprocess.run
+        # call never returns. False = exit cleanly after build.
+        "-e", f"serve_tiles=False",
         "-e", f"server_threads={cores}",
         "-v", f"{work_dir.resolve()}:/custom_files",
         image,

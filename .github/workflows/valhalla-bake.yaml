@@ -1,0 +1,90 @@
+name: Valhalla Tile Bake
+
+# Manual trigger only — bakes are explicit operations (~30-45 min
+# wall time, costs free-tier-minutes). Bump bundle-version + run
+# whenever the OSM extracts on Geofabrik refresh and you want a
+# new bundle on R2.
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Region from GEOFABRIK_PBF_URLS'
+        required: true
+        default: 'de'
+        type: choice
+        options:
+          - de    # Germany only — fits in 7-8 GB RAM, runs on free ubuntu-latest
+          - dach  # DE + AT + CH — needs ubuntu-latest-large (16 GB), out of scope today
+      bundle-version:
+        description: 'Bundle version (integer, bump for fresh bakes)'
+        required: true
+        default: '1'
+        type: string
+
+jobs:
+  bake:
+    # Free-tier runner: 7 GB RAM, 14 GB SSD, 4 cores. Good enough for
+    # Germany-only build. DACH would OOM on this and needs the
+    # `ubuntu-latest-large` runner from the Pro tier.
+    runs-on: ubuntu-latest
+    # Wall-time budget: download (~5 min) + valhalla build (~25-40 min)
+    # + package + upload (~10 min). 90 min is comfortable headroom.
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up runner disk
+        run: |
+          # ubuntu-latest ships with ~8 GB of pre-installed tooling we
+          # don't need. Free it before downloading 5 GB of PBFs.
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+                     /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run Valhalla bake (docker mode)
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+        run: |
+          # GitHub runners have docker pre-installed, so --mode docker
+          # works out of the box. The container handles PBF download +
+          # valhalla_build_tiles; our Python wrapper packages + uploads.
+          python -m bake.run_valhalla \
+            --region "${{ inputs.region }}" \
+            --bundle-version "${{ inputs.bundle-version }}" \
+            --mode docker \
+            --cores 4
+
+      - name: Verify upload via R2 public URL
+        run: |
+          REGION="${{ inputs.region }}"
+          MANIFEST_URL="${{ secrets.R2_PUBLIC_URL }}/v1/valhalla/${REGION}/manifest.json"
+          echo "Verifying $MANIFEST_URL"
+          # Public URL fetch; should return 200 + JSON body.
+          curl --fail --silent --show-error "$MANIFEST_URL" | tee manifest-verify.json
+          echo
+          echo "::notice title=Bake complete::Manifest live at $MANIFEST_URL"
+
+      - name: Upload manifest artifact
+        # Attaches the manifest JSON to the workflow run for easy
+        # inspection without needing R2 read access.
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-${{ inputs.region }}-v${{ inputs.bundle-version }}
+          path: manifest-verify.json
+          retention-days: 30
