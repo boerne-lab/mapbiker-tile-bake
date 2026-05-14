@@ -148,6 +148,25 @@ The data this pipeline produces is licensed by the upstream publishers:
 Attribution strings live in the iOS `R2HostedLoD2Adapter.Config` factories
 (`bayernR2`, `nrwR2`, `hessenR2`) and are surfaced via the app's Attribution view.
 
+## OSM Bake Pipeline (added 2026-05)
+
+Parallel to LoD2, OSM data is also baked to R2 for HE/BY/NRW. Wire-format
+**v2** carries normalized class-systems (building / landuse / road / surface /
+railway / species), pedestrian-sidewalk presence flags per road (`sidewalk_left`,
+`sidewalk_right`), plus raw OSM tags as escape-hatch.
+
+v2 bumped from v1 on 2026-05-13 to add the required sidewalk flags
+(European urban roads almost always have at least one sidewalk; classifier
+uses explicit `sidewalk=*` tags + per-highway-class defaults). v1 tiles
+remain on `/v1/osm/` on R2 for roll-back; new bakes write to `/v2/osm/`.
+
+Source of truth for class mappings: `data/classify_osm_tables.json`.
+This file is also synced into `mapbiker/TrackRider/Resources/` so iOS can
+classify Live-Overpass tiles consistently.
+
+CLI:
+    python -m bake.run_osm --state he --source-version geofabrik-2026-05
+
 ## Modules
 
 | File | Responsibility |
