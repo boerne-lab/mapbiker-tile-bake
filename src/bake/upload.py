@@ -31,12 +31,16 @@ def _remote_path_for(*, state: str, z: int, x: int, y: int,
     """Build R2 remote key for a tile.
 
     LoD2 uses /v2/lod2/{state}/z{z}/{x}/{y}.json (bumped from v1 in 2026-05).
-    OSM uses /v2/osm/{state}/z{z}/{x}/{y}.json (bumped from v1 in 2026-05-14 for required sidewalk fields).
+    OSM uses /v3/osm/{state}/z{z}/{x}/{y}.json (bumped from v2 in 2026-05-14 for
+    richer OSM data: width, tunnel, maxspeed, building colour+material, water
+    subtype, barrier layer).
     """
     if source_type == "lod2":
         return f"v2/lod2/{state}/z{z}/{x}/{y}.json"
     elif source_type == "osm":
-        return f"v2/osm/{state}/z{z}/{x}/{y}.json"  # v2 bumped from v1 2026-05-14
+        # v3 (was v2; bumped 2026-05-14 for richer OSM data: width, tunnel,
+        # maxspeed, building colour+material, water subtype, barrier layer)
+        return f"v3/osm/{state}/z{z}/{x}/{y}.json"
     raise ValueError(f"unknown source_type: {source_type}")
 
 

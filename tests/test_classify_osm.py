@@ -2,7 +2,8 @@ import pytest
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
     classify_surface, classify_railway, classify_tree_species,
-    classify_sidewalks,
+    classify_sidewalks, classify_water_subkind, classify_barrier_kind,
+    classify_building_material, classify_roof_material,
 )
 
 
@@ -136,3 +137,75 @@ def test_classify_tree_species(leaf_type, genus, expected):
 ])
 def test_classify_sidewalks(tags, highway, expected):
     assert classify_sidewalks(tags=tags, highway=highway) == expected
+
+
+# --- v3 new classifiers ---
+
+@pytest.mark.parametrize("water_tag,expected", [
+    ("lake",      "lake"),
+    ("pond",      "pond"),
+    ("reservoir", "reservoir"),
+    ("basin",     "basin"),
+    ("canal",     "canal"),
+    ("river",     "river"),
+    ("stream",    None),   # unmapped → None
+    (None,        None),   # absent → None
+])
+def test_classify_water_subkind(water_tag, expected):
+    assert classify_water_subkind(water_tag=water_tag) == expected
+
+
+@pytest.mark.parametrize("barrier_tag,expected", [
+    ("hedge",          "hedge"),
+    ("fence",          "fence"),
+    ("wall",           "wall"),
+    ("retaining_wall", "wall"),
+    ("city_wall",      "wall"),
+    ("guard_rail",     "fence"),
+    ("handrail",       "fence"),
+    ("kerb",           None),    # explicitly mapped to "ignore" → returns None
+    ("bollard",        None),    # unmapped → None
+    (None,             None),    # absent → None
+])
+def test_classify_barrier_kind(barrier_tag, expected):
+    assert classify_barrier_kind(barrier_tag=barrier_tag) == expected
+
+
+@pytest.mark.parametrize("material_tag,expected", [
+    ("brick",    "brick"),
+    ("stone",    "stone"),
+    ("concrete", "concrete"),
+    ("wood",     "wood"),
+    ("timber",   "wood"),
+    ("metal",    "metal"),
+    ("glass",    "glass"),
+    ("plaster",  "plaster"),
+    ("stucco",   "plaster"),
+    ("cement",   "concrete"),
+    ("unknown_material", None),   # unmapped → None
+    (None,       None),           # absent → None
+])
+def test_classify_building_material(material_tag, expected):
+    assert classify_building_material(material_tag=material_tag) == expected
+
+
+@pytest.mark.parametrize("material_tag,expected", [
+    ("tile",           "tile"),
+    ("tiles",          "tile"),
+    ("clay_tiles",     "tile"),
+    ("concrete_tiles", "tile"),
+    ("slate",          "slate"),
+    ("metal",          "metal"),
+    ("copper",         "metal"),
+    ("zinc",           "metal"),
+    ("thatch",         "thatch"),
+    ("wood",           "wood"),
+    ("shingle",        "wood"),
+    ("asphalt",        "asphalt"),
+    ("bitumen",        "asphalt"),
+    ("gravel",         "gravel"),
+    ("unknown_roof",   None),     # unmapped → None
+    (None,             None),     # absent → None
+])
+def test_classify_roof_material(material_tag, expected):
+    assert classify_roof_material(material_tag=material_tag) == expected

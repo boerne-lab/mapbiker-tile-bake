@@ -28,7 +28,8 @@ def test_full_pipeline_synthetic_hessen_corner():
         assert len(tiles) >= 1, f"no tiles produced; stdout={result.stdout}"
 
         tile_data = json.loads(tiles[0].read_text(encoding="utf-8"))
-        assert tile_data["schema_version"] == 1
+        assert tile_data["schema_version"] == 3
+        assert "barriers" in tile_data  # v3 barrier layer present
         assert len(tile_data["buildings"]) >= 1
         assert tile_data["buildings"][0]["building_class"] == "residential"
         assert tile_data["buildings"][0]["building_type"] == "residential"

@@ -16,6 +16,14 @@ KEEP_KEYS: frozenset[str] = frozenset({
     "leaf_type", "leaf_cycle", "genus", "diameter_crown",
     # D3 / landmarks
     "wikidata", "historic", "tourism", "religion", "denomination",
+    # v3 additions: road detail
+    "maxspeed",
+    # v3 additions: building detail
+    "building:colour", "roof:colour", "building:material", "roof:material",
+    # v3 additions: barrier layer
+    "barrier",
+    # v3 additions: tree taxon
+    "taxon",
     # Common
     "name", "ref",
 })

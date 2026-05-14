@@ -2,18 +2,25 @@ import pytest
 from pydantic import ValidationError
 
 
-def test_osm_tile_validates_minimal():
+def _minimal_tile(**kwargs):
+    """Helper: build a minimal OSMTile v3 with overrideable fields."""
     from bake.schema_osm import OSMTile, TileCoord
-    t = OSMTile(
-        schema_version=2, state="de_he",
+    defaults = dict(
+        schema_version=3, state="de_he",
         tile=TileCoord(z=15, x=0, y=0),
         generated_at="2026-05-07T00:00:00Z",
         source_dataset_version="geofabrik-2026-05",
         buildings=[], roads=[], waterways=[], water_polygons=[],
         railways=[], traffic_signals=[], trees=[], forests=[],
-        bridges=[], landuse=[],
+        bridges=[], landuse=[], barriers=[],
     )
-    assert t.schema_version == 2
+    defaults.update(kwargs)
+    return OSMTile(**defaults)
+
+
+def test_osm_tile_validates_minimal():
+    t = _minimal_tile()
+    assert t.schema_version == 3
     assert t.state == "de_he"
 
 
@@ -85,34 +92,42 @@ def test_state_must_be_german():
     from bake.schema_osm import OSMTile, TileCoord
     with pytest.raises(ValidationError):
         OSMTile(
-            schema_version=2, state="at_w",  # AT not in v2 schema literal
+            schema_version=3, state="at_w",  # AT not in v3 schema literal
             tile=TileCoord(z=15, x=0, y=0),
             generated_at="2026-05-07T00:00:00Z",
             source_dataset_version="x",
             buildings=[], roads=[], waterways=[], water_polygons=[],
             railways=[], traffic_signals=[], trees=[], forests=[],
-            bridges=[], landuse=[],
+            bridges=[], landuse=[], barriers=[],
         )
 
 
-def test_osm_tile_validates_at_v2():
-    """Schema bumped to v2 for required sidewalk_left/right on Road."""
+def test_osm_tile_validates_at_v3():
+    """Schema bumped to v3 for Road width/tunnel/maxspeed, Building colour/material,
+    WaterPolygon kind, Tree taxon, and new Barrier layer."""
+    t = _minimal_tile()
+    assert t.schema_version == 3
+    assert t.barriers == []
+
+
+def test_osm_tile_rejects_v2_schema_version():
+    """v2 readers cannot parse v3 tiles, and vice versa — they live
+    under different URL prefixes (/v2/osm/ vs /v3/osm/)."""
     from bake.schema_osm import OSMTile, TileCoord
-    t = OSMTile(
-        schema_version=2, state="de_he",
-        tile=TileCoord(z=15, x=0, y=0),
-        generated_at="2026-05-07T00:00:00Z",
-        source_dataset_version="geofabrik-2026-05",
-        buildings=[], roads=[], waterways=[], water_polygons=[],
-        railways=[], traffic_signals=[], trees=[], forests=[],
-        bridges=[], landuse=[],
-    )
-    assert t.schema_version == 2
+    with pytest.raises(ValidationError):
+        OSMTile(
+            schema_version=2, state="de_he",
+            tile=TileCoord(z=15, x=0, y=0),
+            generated_at="2026-05-07T00:00:00Z",
+            source_dataset_version="geofabrik-2026-05",
+            buildings=[], roads=[], waterways=[], water_polygons=[],
+            railways=[], traffic_signals=[], trees=[], forests=[],
+            bridges=[], landuse=[], barriers=[],
+        )
 
 
 def test_osm_tile_rejects_v1_schema_version():
-    """v1 readers cannot parse v2 tiles, and vice versa — they live
-    under different URL prefixes (/v1/osm/ vs /v2/osm/)."""
+    """v1 tiles are incompatible with v3 schema."""
     from bake.schema_osm import OSMTile, TileCoord
     with pytest.raises(ValidationError):
         OSMTile(
@@ -122,7 +137,7 @@ def test_osm_tile_rejects_v1_schema_version():
             source_dataset_version="geofabrik-2026-05",
             buildings=[], roads=[], waterways=[], water_polygons=[],
             railways=[], traffic_signals=[], trees=[], forests=[],
-            bridges=[], landuse=[],
+            bridges=[], landuse=[], barriers=[],
         )
 
 
@@ -150,3 +165,91 @@ def test_road_accepts_sidewalk_flags():
              sidewalk_left=True, sidewalk_right=False)
     assert r.sidewalk_left is True
     assert r.sidewalk_right is False
+
+
+def test_road_optional_width_tunnel_maxspeed():
+    """Road accepts the v3 optional fields and they round-trip correctly."""
+    from bake.schema_osm import Road, Coord
+    r = Road(
+        id=99,
+        coordinates=[Coord(lat=50.0, lon=8.0), Coord(lat=50.001, lon=8.001)],
+        highway="primary", road_class="main_road",
+        surface="asphalt", surface_class="paved",
+        name="Hauptstraße", lanes=2,
+        is_bridge=False, layer=0, cycleway=None,
+        sidewalk_left=True, sidewalk_right=True,
+        width_m=7.5, is_tunnel=True, maxspeed=50,
+    )
+    assert r.width_m == 7.5
+    assert r.is_tunnel is True
+    assert r.maxspeed == 50
+
+
+def test_road_optional_fields_default_to_none_false():
+    """New v3 Road fields default cleanly (no required-field errors)."""
+    from bake.schema_osm import Road, Coord
+    r = Road(
+        id=1,
+        coordinates=[Coord(lat=0, lon=0), Coord(lat=0, lon=1)],
+        highway="residential", road_class="local_road",
+        surface=None, surface_class="unknown",
+        name=None, lanes=None, is_bridge=False, layer=0, cycleway=None,
+        sidewalk_left=False, sidewalk_right=False,
+    )
+    assert r.width_m is None
+    assert r.is_tunnel is False
+    assert r.maxspeed is None
+
+
+def test_building_optional_colour_material():
+    """Building accepts the v3 optional colour and material fields."""
+    from bake.schema_osm import Building, Coord
+    b = Building(
+        id=42,
+        coordinates=[Coord(lat=0, lon=0), Coord(lat=0, lon=0.001), Coord(lat=0.001, lon=0)],
+        building_class="residential",
+        colour="white",
+        roof_colour="#cc3300",
+        material="brick",
+        roof_material="tile",
+    )
+    assert b.colour == "white"
+    assert b.roof_colour == "#cc3300"
+    assert b.material == "brick"
+    assert b.roof_material == "tile"
+
+
+def test_building_optional_colour_material_defaults_to_none():
+    """Existing Building fixtures still work — new fields default to None."""
+    from bake.schema_osm import Building, Coord
+    b = Building(
+        id=1,
+        coordinates=[Coord(lat=0, lon=0), Coord(lat=0, lon=0.001), Coord(lat=0.001, lon=0)],
+        building_class="unknown",
+    )
+    assert b.colour is None
+    assert b.material is None
+
+
+def test_barrier_validates():
+    """Barrier model accepts kind and optional height_m."""
+    from bake.schema_osm import Barrier, Coord
+    b = Barrier(
+        id=1001,
+        coordinates=[Coord(lat=50.0, lon=8.0), Coord(lat=50.001, lon=8.0)],
+        kind="hedge",
+        height_m=1.5,
+        name=None,
+    )
+    assert b.kind == "hedge"
+    assert b.height_m == 1.5
+
+
+def test_barrier_requires_two_coords():
+    """Barrier inherits the min_length=2 constraint from Field."""
+    from bake.schema_osm import Barrier, Coord
+    with pytest.raises(ValidationError):
+        Barrier(
+            id=1, coordinates=[Coord(lat=0, lon=0)],  # only 1 coord — invalid
+            kind="fence",
+        )

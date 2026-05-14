@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 import mercantile
 import osmium
@@ -11,12 +11,13 @@ import osmium
 from bake.schema_osm import (
     OSMTile, TileCoord, Coord,
     Building, Road, Railway, Tree, Forest, LandUse,
-    Waterway, WaterPolygon, TrafficSignal, Bridge,
+    Waterway, WaterPolygon, TrafficSignal, Bridge, Barrier,
 )
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
     classify_surface, classify_railway, classify_tree_species,
-    classify_sidewalks,
+    classify_sidewalks, classify_water_subkind, classify_barrier_kind,
+    classify_building_material, classify_roof_material,
 )
 
 
@@ -67,7 +68,7 @@ class _Handler(osmium.SimpleHandler):
                 "buildings": [], "roads": [], "waterways": [],
                 "water_polygons": [], "railways": [],
                 "traffic_signals": [], "trees": [], "forests": [],
-                "bridges": [], "landuse": [],
+                "bridges": [], "landuse": [], "barriers": [],
             }
         return self.bins[key]
 
@@ -97,6 +98,7 @@ class _Handler(osmium.SimpleHandler):
                 ),
                 crown_diameter_m=_parse_float(tags.get("diameter_crown")),
                 height_m=_parse_float(tags.get("height")),
+                taxon=tags.get("taxon"),
             ))
 
     def way(self, w):
@@ -139,10 +141,12 @@ class _Handler(osmium.SimpleHandler):
                 width_m=_parse_float(tags.get("width")),
             ))
         elif (tags.get("natural") == "water" or "water" in tags) and is_closed:
+            water_kind = classify_water_subkind(water_tag=tags.get("water"))
             bin_["water_polygons"].append(WaterPolygon(
                 id=w.id,
                 coordinates=coords,
                 name=tags.get("name"),
+                kind=water_kind,
             ))
         elif (tags.get("landuse") == "forest" or tags.get("natural") == "wood") and is_closed:
             bin_["forests"].append(Forest(
@@ -171,6 +175,8 @@ class _Handler(osmium.SimpleHandler):
                 landuse_class=cls,
                 raw_tag=raw_tag,
             ))
+        elif tags.get("barrier"):
+            self._add_barrier(bin_, w.id, coords, tags)
 
         if tags.get("bridge") == "yes":
             bin_["bridges"].append(Bridge(
@@ -181,6 +187,10 @@ class _Handler(osmium.SimpleHandler):
 
     def _add_building(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
         h = _parse_float(tags.get("height")) or _parse_float(tags.get("building:height"))
+        colour = tags.get("building:colour")
+        roof_colour = tags.get("roof:colour")
+        material = classify_building_material(material_tag=tags.get("building:material"))
+        roof_material = classify_roof_material(material_tag=tags.get("roof:material"))
         bin_["buildings"].append(Building(
             id=wid,
             coordinates=coords,
@@ -194,6 +204,10 @@ class _Handler(osmium.SimpleHandler):
             wikidata=tags.get("wikidata"),
             historic=tags.get("historic"),
             name=tags.get("name"),
+            colour=colour,
+            roof_colour=roof_colour,
+            material=material,
+            roof_material=roof_material,
         ))
 
     def _add_road(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
@@ -204,6 +218,23 @@ class _Handler(osmium.SimpleHandler):
         sidewalk_left, sidewalk_right = classify_sidewalks(
             tags=tags, highway=tags["highway"]
         )
+        # width tag is a float in metres
+        width = tags.get("width")
+        try:
+            width_m: Optional[float] = float(width) if width else None
+        except ValueError:
+            width_m = None   # OSM "5.5 m" or "approx" values silently fall back
+
+        # tunnel=yes is the boolean
+        is_tunnel = (tags.get("tunnel") == "yes")
+
+        # maxspeed is integer km/h; sometimes "50 mph" or "DE:urban"
+        maxspeed_raw = tags.get("maxspeed")
+        try:
+            maxspeed: Optional[int] = int(maxspeed_raw) if maxspeed_raw else None
+        except (ValueError, TypeError):
+            maxspeed = None
+
         bin_["roads"].append(Road(
             id=wid,
             coordinates=coords,
@@ -218,6 +249,24 @@ class _Handler(osmium.SimpleHandler):
             cycleway=tags.get("cycleway"),
             sidewalk_left=sidewalk_left,
             sidewalk_right=sidewalk_right,
+            width_m=width_m,
+            is_tunnel=is_tunnel,
+            maxspeed=maxspeed,
+        ))
+
+    def _add_barrier(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
+        kind = classify_barrier_kind(barrier_tag=tags.get("barrier"))
+        if kind is None:   # unmapped or ignore-classified (e.g. kerb)
+            return
+        height = tags.get("height")
+        try:
+            height_m: Optional[float] = float(height) if height else None
+        except ValueError:
+            height_m = None
+        bin_["barriers"].append(Barrier(
+            id=wid, coordinates=coords,
+            kind=kind, height_m=height_m,
+            name=tags.get("name"),
         ))
 
     def _add_railway(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
@@ -247,7 +296,7 @@ def parse_pbf(
         if not any(bin_.values()):
             continue
         yield OSMTile(
-            schema_version=2,
+            schema_version=3,
             state=state,
             tile=TileCoord(z=Z, x=x, y=y),
             generated_at=now,

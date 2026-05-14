@@ -1,11 +1,19 @@
-"""OSM Wire-format-v2 schema. Parallel to LoD2 schema.py — separate
-version space, separate URL pfade (/v2/osm/{state}/...). Class-Felder REQUIRED.
+"""OSM Wire-format-v3 schema. Parallel to LoD2 schema.py — separate
+version space, separate URL pfade (/v3/osm/{state}/...). Class-Felder REQUIRED.
 
 v2 vs v1 (2026-05-13):
 - Road gains REQUIRED `sidewalk_left: bool` + `sidewalk_right: bool` flags,
   computed bake-side from `sidewalk=*` OSM tag + per-side overrides +
   highway-class default (see `classify_sidewalks`). v1 tiles remain on
   /v1/osm/ on R2 for roll-back; v2 tiles ship under /v2/osm/.
+
+v3 vs v2 (2026-05-14):
+- Road gains optional `width_m`, `is_tunnel`, `maxspeed` fields.
+- Building gains optional `colour`, `roof_colour`, `material`, `roof_material`.
+- WaterPolygon gains optional `kind` (lake/pond/canal/reservoir/basin/river).
+- Tree gains optional `taxon` (Wikidata QID for genus/species precision).
+- NEW: Barrier model (hedges, fences, walls) + OSMTile.barriers list.
+  v2 tiles remain on /v2/osm/ for roll-back; v3 tiles ship under /v3/osm/.
 """
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
@@ -35,6 +43,11 @@ class Building(BaseModel):
     wikidata: Optional[str] = None
     historic: Optional[str] = None
     name: Optional[str] = None
+    # v3 additions
+    colour: Optional[str] = None        # raw OSM building:colour value (e.g. "white", "#a0522d")
+    roof_colour: Optional[str] = None   # raw OSM roof:colour value
+    material: Optional[str] = None      # mapped via OSM_BUILDING_MATERIAL_TO_CLASS
+    roof_material: Optional[str] = None  # mapped via OSM_ROOF_MATERIAL_TO_CLASS
 
 
 class Road(BaseModel):
@@ -58,6 +71,10 @@ class Road(BaseModel):
     # reads as "industrial backroad" everywhere.
     sidewalk_left: bool
     sidewalk_right: bool
+    # v3 additions
+    width_m: Optional[float] = None   # OSM width=* in metres
+    is_tunnel: bool = False            # OSM tunnel=yes (mirrors is_bridge)
+    maxspeed: Optional[int] = None    # OSM maxspeed=* in km/h (integers only; "DE:urban" etc. → None)
 
 
 class Railway(BaseModel):
@@ -78,6 +95,8 @@ class Tree(BaseModel):
     species_class: str
     crown_diameter_m: Optional[float] = None
     height_m: Optional[float] = None
+    # v3 addition
+    taxon: Optional[str] = None   # Wikidata QID for genus/species precision
 
 
 class Forest(BaseModel):
@@ -107,6 +126,22 @@ class WaterPolygon(BaseModel):
     id: int
     coordinates: list[Coord] = Field(min_length=3)
     name: Optional[str] = None
+    # v3 addition
+    kind: Optional[str] = None   # subtype: lake/pond/canal/reservoir/basin/river
+
+
+class Barrier(BaseModel):
+    """Linear barrier ways — hedges, fences, walls.
+
+    Visual layer for cycling-world stylization. `kind` is one of:
+    `hedge`, `fence`, `wall`, `ignore`. Entries classified as `ignore`
+    (e.g. kerbs that are part of road geometry) are dropped at bake time.
+    """
+    id: int
+    coordinates: list[Coord] = Field(min_length=2)
+    kind: str   # mapped via OSM_BARRIER_TO_CLASS, REQUIRED
+    height_m: Optional[float] = None   # if `height=*` is set; useful for walls
+    name: Optional[str] = None
 
 
 class TrafficSignal(BaseModel):
@@ -122,7 +157,7 @@ class Bridge(BaseModel):
 
 
 class OSMTile(BaseModel):
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     state: Literal["de_by", "de_nw", "de_he", "de_be", "de_bb",
                    "de_bw", "de_hh", "de_hb", "de_mv", "de_ni",
                    "de_rp", "de_sh", "de_sl", "de_sn", "de_st", "de_th"]
@@ -139,3 +174,4 @@ class OSMTile(BaseModel):
     forests: list[Forest]
     bridges: list[Bridge]
     landuse: list[LandUse]
+    barriers: list[Barrier]

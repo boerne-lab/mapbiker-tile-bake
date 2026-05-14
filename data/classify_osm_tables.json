@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "OSM_BUILDING_TO_CLASS": {
     "residential": "residential",
     "house": "residential",
@@ -122,5 +122,51 @@
     "footway":       {"left": false, "right": false},
     "cycleway":      {"left": false, "right": false},
     "pedestrian":    {"left": false, "right": false}
+  },
+  "OSM_WATER_SUBKIND_TO_CLASS": {
+    "lake":      "lake",
+    "pond":      "pond",
+    "reservoir": "reservoir",
+    "basin":     "basin",
+    "canal":     "canal",
+    "river":     "river"
+  },
+  "OSM_BARRIER_TO_CLASS": {
+    "hedge":           "hedge",
+    "fence":           "fence",
+    "wall":            "wall",
+    "retaining_wall":  "wall",
+    "city_wall":       "wall",
+    "guard_rail":      "fence",
+    "handrail":        "fence",
+    "kerb":            "ignore"
+  },
+  "OSM_BUILDING_MATERIAL_TO_CLASS": {
+    "brick":     "brick",
+    "stone":     "stone",
+    "concrete":  "concrete",
+    "wood":      "wood",
+    "timber":    "wood",
+    "metal":     "metal",
+    "glass":     "glass",
+    "plaster":   "plaster",
+    "stucco":    "plaster",
+    "cement":    "concrete"
+  },
+  "OSM_ROOF_MATERIAL_TO_CLASS": {
+    "tile":           "tile",
+    "tiles":          "tile",
+    "clay_tiles":     "tile",
+    "concrete_tiles": "tile",
+    "slate":          "slate",
+    "metal":          "metal",
+    "copper":         "metal",
+    "zinc":           "metal",
+    "thatch":         "thatch",
+    "wood":           "wood",
+    "shingle":        "wood",
+    "asphalt":        "asphalt",
+    "bitumen":        "asphalt",
+    "gravel":         "gravel"
   }
 }

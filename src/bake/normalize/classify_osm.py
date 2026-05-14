@@ -69,6 +69,35 @@ def classify_tree_species(*, leaf_type: Optional[str] = None,
     return "unknown"
 
 
+def classify_water_subkind(*, water_tag: Optional[str] = None) -> Optional[str]:
+    """OSM water=* subtype → canonical kind. Returns None for unmapped values."""
+    if not water_tag:
+        return None
+    return _load_tables()["OSM_WATER_SUBKIND_TO_CLASS"].get(water_tag)
+
+
+def classify_barrier_kind(*, barrier_tag: Optional[str]) -> Optional[str]:
+    """OSM barrier=* → canonical kind. Returns None for unmapped or `ignore`-classified values."""
+    if not barrier_tag:
+        return None
+    result = _load_tables()["OSM_BARRIER_TO_CLASS"].get(barrier_tag)
+    if result == "ignore":
+        return None
+    return result
+
+
+def classify_building_material(*, material_tag: Optional[str] = None) -> Optional[str]:
+    if not material_tag:
+        return None
+    return _load_tables()["OSM_BUILDING_MATERIAL_TO_CLASS"].get(material_tag)
+
+
+def classify_roof_material(*, material_tag: Optional[str] = None) -> Optional[str]:
+    if not material_tag:
+        return None
+    return _load_tables()["OSM_ROOF_MATERIAL_TO_CLASS"].get(material_tag)
+
+
 def classify_sidewalks(*, tags: dict, highway: str) -> tuple[bool, bool]:
     """Return `(sidewalk_left, sidewalk_right)` for a highway way.
 
