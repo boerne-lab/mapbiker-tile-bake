@@ -69,10 +69,11 @@ def test_remote_path_for_lod2_v2():
     assert p == "v2/lod2/de_he/z15/100/200.json"
 
 
-def test_remote_path_for_osm_v1():
+def test_remote_path_for_osm_v2():
+    # Bump from v1 to v2 (2026-05-14) — v2 includes required sidewalk fields
     from bake.upload import _remote_path_for
     p = _remote_path_for(state="de_he", z=15, x=100, y=200, source_type="osm")
-    assert p == "v1/osm/de_he/z15/100/200.json"
+    assert p == "v2/osm/de_he/z15/100/200.json"
 
 
 def test_remote_path_for_unknown_source_type_raises():
