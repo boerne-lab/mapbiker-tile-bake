@@ -4,8 +4,6 @@
     "residential": "residential",
     "house": "residential",
     "apartments": "residential",
-    "detached": "residential",
-    "terrace": "residential",
     "cathedral": "religious",
     "church": "religious",
     "chapel": "religious",
@@ -15,7 +13,6 @@
     "commercial": "commercial",
     "office": "commercial",
     "retail": "commercial",
-    "supermarket": "commercial",
     "industrial": "industrial",
     "warehouse": "industrial",
     "factory": "industrial",
@@ -24,7 +21,6 @@
     "university": "civic",
     "hospital": "civic",
     "government": "civic",
-    "public": "civic",
     "barn": "agricultural",
     "farm": "agricultural",
     "stable": "agricultural",
@@ -82,7 +78,6 @@
     "ground": "gravel",
     "dirt": "gravel",
     "earth": "gravel",
-    "grass": "gravel",
     "sand": "gravel"
   },
   "OSM_RAILWAY_TO_CLASS": {
@@ -100,5 +95,32 @@
     "broadleaved": "broadleaved",
     "mixed": "mixed"
   },
-  "OSM_GENUS_TO_ORNAMENTAL": ["prunus", "magnolia", "sorbus", "tilia"]
+  "OSM_GENUS_TO_ORNAMENTAL": ["prunus", "magnolia", "sorbus", "tilia"],
+  "OSM_SIDEWALK_TAG": {
+    "both":     {"left": true,  "right": true},
+    "left":     {"left": true,  "right": false},
+    "right":    {"left": false, "right": true},
+    "no":       {"left": false, "right": false},
+    "none":     {"left": false, "right": false},
+    "separate": {"left": false, "right": false}
+  },
+  "OSM_SIDEWALK_DEFAULT_BY_HIGHWAY": {
+    "residential":   {"left": true,  "right": true},
+    "living_street": {"left": true,  "right": true},
+    "tertiary":      {"left": true,  "right": true},
+    "secondary":     {"left": true,  "right": true},
+    "primary":       {"left": true,  "right": true},
+    "unclassified":  {"left": true,  "right": true},
+    "service":       {"left": false, "right": false},
+    "motorway":      {"left": false, "right": false},
+    "motorway_link": {"left": false, "right": false},
+    "trunk":         {"left": false, "right": false},
+    "trunk_link":    {"left": false, "right": false},
+    "primary_link":  {"left": false, "right": false},
+    "track":         {"left": false, "right": false},
+    "path":          {"left": false, "right": false},
+    "footway":       {"left": false, "right": false},
+    "cycleway":      {"left": false, "right": false},
+    "pedestrian":    {"left": false, "right": false}
+  }
 }
