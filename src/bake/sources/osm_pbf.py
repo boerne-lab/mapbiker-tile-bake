@@ -16,6 +16,7 @@ from bake.schema_osm import (
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
     classify_surface, classify_railway, classify_tree_species,
+    classify_sidewalks,
 )
 
 
@@ -200,6 +201,9 @@ class _Handler(osmium.SimpleHandler):
             layer = int(tags.get("layer", "0"))
         except (ValueError, TypeError):
             layer = 0
+        sidewalk_left, sidewalk_right = classify_sidewalks(
+            tags=tags, highway=tags["highway"]
+        )
         bin_["roads"].append(Road(
             id=wid,
             coordinates=coords,
@@ -212,6 +216,8 @@ class _Handler(osmium.SimpleHandler):
             is_bridge=(tags.get("bridge") == "yes"),
             layer=layer,
             cycleway=tags.get("cycleway"),
+            sidewalk_left=sidewalk_left,
+            sidewalk_right=sidewalk_right,
         ))
 
     def _add_railway(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
@@ -241,7 +247,7 @@ def parse_pbf(
         if not any(bin_.values()):
             continue
         yield OSMTile(
-            schema_version=1,
+            schema_version=2,
             state=state,
             tile=TileCoord(z=Z, x=x, y=y),
             generated_at=now,

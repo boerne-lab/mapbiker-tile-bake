@@ -1,7 +1,12 @@
-"""OSM Wire-format-v1 schema. Parallel to LoD2 schema.py — separate
-version space, separate URL pfade (/v1/osm/{state}/...). Class-Felder
-REQUIRED, raw OSM tags preserved as escape-hatch for sub-classification
-without re-bake."""
+"""OSM Wire-format-v2 schema. Parallel to LoD2 schema.py — separate
+version space, separate URL pfade (/v2/osm/{state}/...). Class-Felder REQUIRED.
+
+v2 vs v1 (2026-05-13):
+- Road gains REQUIRED `sidewalk_left: bool` + `sidewalk_right: bool` flags,
+  computed bake-side from `sidewalk=*` OSM tag + per-side overrides +
+  highway-class default (see `classify_sidewalks`). v1 tiles remain on
+  /v1/osm/ on R2 for roll-back; v2 tiles ship under /v2/osm/.
+"""
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
@@ -44,6 +49,15 @@ class Road(BaseModel):
     is_bridge: bool = False
     layer: int = 0
     cycleway: Optional[str] = None
+    # Sidewalk flags — computed bake-side from `sidewalk=*` OSM tag
+    # plus per-side overrides plus highway-class default fallback
+    # (see `classify_sidewalks` in bake.normalize.classify_osm).
+    # REQUIRED so iOS always has a defined value; pre-bake assigns
+    # explicitly. European urban streets almost always have at
+    # least one sidewalk; without these flags the rendered world
+    # reads as "industrial backroad" everywhere.
+    sidewalk_left: bool
+    sidewalk_right: bool
 
 
 class Railway(BaseModel):
@@ -108,7 +122,7 @@ class Bridge(BaseModel):
 
 
 class OSMTile(BaseModel):
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     state: Literal["de_by", "de_nw", "de_he", "de_be", "de_bb",
                    "de_bw", "de_hh", "de_hb", "de_mv", "de_ni",
                    "de_rp", "de_sh", "de_sl", "de_sn", "de_st", "de_th"]
