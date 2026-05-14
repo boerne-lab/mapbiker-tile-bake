@@ -67,3 +67,41 @@ def classify_tree_species(*, leaf_type: Optional[str] = None,
     if leaf_type:
         return tables["OSM_LEAF_TYPE_TO_CLASS"].get(leaf_type, "unknown")
     return "unknown"
+
+
+def classify_sidewalks(*, tags: dict, highway: str) -> tuple[bool, bool]:
+    """Return `(sidewalk_left, sidewalk_right)` for a highway way.
+
+    Resolution order:
+      1. Per-side tags `sidewalk:left=yes` / `sidewalk:right=yes`
+         override individual flags (highest priority).
+      2. Explicit `sidewalk=both|left|right|no|none|separate`.
+      3. Fallback: `OSM_SIDEWALK_DEFAULT_BY_HIGHWAY[highway]`.
+      4. Highway not in default table → `(False, False)`.
+
+    `separate` returns `(False, False)` because the sidewalk exists as
+    its own `highway=footway` way and is rendered there — emitting an
+    attached strip too would double-render.
+    """
+    tables = _load_tables()
+
+    # Base from explicit sidewalk=* or highway default
+    if tags.get("sidewalk") in tables["OSM_SIDEWALK_TAG"]:
+        base = tables["OSM_SIDEWALK_TAG"][tags["sidewalk"]]
+    else:
+        base = tables["OSM_SIDEWALK_DEFAULT_BY_HIGHWAY"].get(
+            highway, {"left": False, "right": False})
+    left = base["left"]
+    right = base["right"]
+
+    # Per-side override (highest priority — wins over sidewalk=no etc.)
+    if tags.get("sidewalk:left") == "yes":
+        left = True
+    if tags.get("sidewalk:right") == "yes":
+        right = True
+    if tags.get("sidewalk:left") in ("no", "none"):
+        left = False
+    if tags.get("sidewalk:right") in ("no", "none"):
+        right = False
+
+    return (left, right)

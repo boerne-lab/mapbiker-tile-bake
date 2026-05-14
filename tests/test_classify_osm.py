@@ -2,6 +2,7 @@ import pytest
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
     classify_surface, classify_railway, classify_tree_species,
+    classify_sidewalks,
 )
 
 
@@ -104,3 +105,34 @@ def test_classify_railway(kind, expected):
 ])
 def test_classify_tree_species(leaf_type, genus, expected):
     assert classify_tree_species(leaf_type=leaf_type, genus=genus) == expected
+
+
+# classify_sidewalks: explicit `sidewalk=*` tag wins over highway-default;
+# per-side `sidewalk:left=yes` / `sidewalk:right=yes` overrides individual flags.
+@pytest.mark.parametrize("tags,highway,expected", [
+    # Explicit sidewalk=* tag
+    ({"sidewalk": "both"}, "residential", (True, True)),
+    ({"sidewalk": "left"}, "residential", (True, False)),
+    ({"sidewalk": "right"}, "residential", (False, True)),
+    ({"sidewalk": "no"}, "residential", (False, False)),
+    ({"sidewalk": "none"}, "residential", (False, False)),
+    ({"sidewalk": "separate"}, "residential", (False, False)),
+    # No sidewalk tag → fall back to highway default
+    ({}, "residential", (True, True)),     # EU urban default
+    ({}, "tertiary", (True, True)),
+    ({}, "motorway", (False, False)),
+    ({}, "footway", (False, False)),       # footway itself is the path
+    ({}, "track", (False, False)),
+    # Per-side override
+    ({"sidewalk:left": "yes"}, "motorway", (True, False)),
+    ({"sidewalk:right": "yes"}, "motorway", (False, True)),
+    ({"sidewalk:left": "yes", "sidewalk:right": "yes"}, "track",
+     (True, True)),
+    # Per-side override combined with sidewalk=*: per-side wins
+    ({"sidewalk": "no", "sidewalk:left": "yes"}, "residential",
+     (True, False)),
+    # Unknown highway falls back to (False, False)
+    ({}, "nonsense_class", (False, False)),
+])
+def test_classify_sidewalks(tags, highway, expected):
+    assert classify_sidewalks(tags=tags, highway=highway) == expected
