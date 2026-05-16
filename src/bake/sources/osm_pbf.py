@@ -12,6 +12,7 @@ from bake.schema_osm import (
     OSMTile, TileCoord, Coord,
     Building, Road, Railway, Tree, Forest, LandUse,
     Waterway, WaterPolygon, TrafficSignal, Bridge, Barrier,
+    TrafficIsland,
 )
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
@@ -69,6 +70,7 @@ class _Handler(osmium.SimpleHandler):
                 "water_polygons": [], "railways": [],
                 "traffic_signals": [], "trees": [], "forests": [],
                 "bridges": [], "landuse": [], "barriers": [],
+                "traffic_islands": [],
             }
         return self.bins[key]
 
@@ -126,6 +128,20 @@ class _Handler(osmium.SimpleHandler):
 
         if "building" in tags and is_closed:
             self._add_building(bin_, w.id, coords, tags)
+        elif is_closed and (
+            tags.get("area:highway") == "traffic_island"
+            or tags.get("highway") == "traffic_island"
+            or tags.get("traffic_calming") == "island"
+        ):
+            # Verkehrsinsel — small raised polygon at intersections /
+            # between traffic lanes. Caught BEFORE the road branch so a
+            # closed-way `highway=traffic_island` doesn't end up as a
+            # road ribbon.
+            bin_["traffic_islands"].append(TrafficIsland(
+                id=w.id,
+                coordinates=coords,
+                name=tags.get("name"),
+            ))
         elif "highway" in tags and tags["highway"] not in {
             "traffic_signals", "stop", "give_way"
         }:

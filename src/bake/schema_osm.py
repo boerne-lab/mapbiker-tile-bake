@@ -156,6 +156,23 @@ class Bridge(BaseModel):
     structure: Optional[str] = None
 
 
+class TrafficIsland(BaseModel):
+    """Verkehrsinsel — a small raised polygon at a road intersection or
+    between traffic lanes, separating flows and offering pedestrians
+    refuge. Tagged in OSM as either:
+        - `area:highway=traffic_island` (newer Carto convention)
+        - `highway=traffic_island` on a closed way (older)
+        - `traffic_calming=island` (sometimes on a closed way for
+          actual polygons; for nodes we do not extract — needs a
+          separate `traffic_calming` node layer)
+    iOS rendering: small flat polygon ~5 cm above terrain, concrete-
+    grey color, optionally with a slight kerb-edge bevel.
+    """
+    id: int
+    coordinates: list[Coord] = Field(min_length=3)
+    name: Optional[str] = None
+
+
 class OSMTile(BaseModel):
     schema_version: Literal[3]
     state: Literal["de_by", "de_nw", "de_he", "de_be", "de_bb",
@@ -175,3 +192,7 @@ class OSMTile(BaseModel):
     bridges: list[Bridge]
     landuse: list[LandUse]
     barriers: list[Barrier]
+    # v3 backward-compatible addition (May 2026): traffic islands.
+    # Default empty so pre-v3.1 tiles still validate. Schema_version
+    # stays at 3 — iOS clients that don't know the field ignore it.
+    traffic_islands: list[TrafficIsland] = Field(default_factory=list)
