@@ -12,7 +12,7 @@ from bake.schema_osm import (
     OSMTile, TileCoord, Coord,
     Building, Road, Railway, Tree, Forest, LandUse,
     Waterway, WaterPolygon, TrafficSignal, Bridge, Barrier,
-    TrafficIsland, Coastline,
+    TrafficIsland, Coastline, RailwayPlatform, PlatformRoof,
 )
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
@@ -71,6 +71,7 @@ class _Handler(osmium.SimpleHandler):
                 "traffic_signals": [], "trees": [], "forests": [],
                 "bridges": [], "landuse": [], "barriers": [],
                 "traffic_islands": [], "coastlines": [],
+                "railway_platforms": [], "platform_roofs": [],
             }
         return self.bins[key]
 
@@ -126,7 +127,27 @@ class _Handler(osmium.SimpleHandler):
             and coords[0].lon == coords[-1].lon
         )
 
-        if "building" in tags and is_closed:
+        # Bahnsteig-Überdachung (`building=roof`) — intercepted BEFORE the
+        # generic building branch so it does NOT get extruded as a solid
+        # box. A `building=roof` polygon represents a free-standing canopy
+        # / Vordach with no walls; iOS renders it as a thin flat roof on
+        # pillars (see PlatformRoofMeshBuilder). Without this short-
+        # circuit the building branch's elif catches it first.
+        if is_closed and tags.get("building") == "roof":
+            h = _parse_float(tags.get("height"))
+            layer_raw = tags.get("layer", "0")
+            try:
+                layer = int(layer_raw)
+            except (ValueError, TypeError):
+                layer = 0
+            bin_["platform_roofs"].append(PlatformRoof(
+                id=w.id,
+                coordinates=coords,
+                height_m=h,
+                roof_material=tags.get("roof:material"),
+                layer=layer,
+            ))
+        elif "building" in tags and is_closed:
             self._add_building(bin_, w.id, coords, tags)
         elif is_closed and (
             tags.get("area:highway") == "traffic_island"
@@ -146,6 +167,18 @@ class _Handler(osmium.SimpleHandler):
             "traffic_signals", "stop", "give_way"
         }:
             self._add_road(bin_, w.id, coords, tags)
+        elif is_closed and tags.get("railway") == "platform":
+            # Bahnsteig — closed-area `railway=platform`. Caught BEFORE
+            # the railway branch so it does NOT end up as a line-railway
+            # record (which would render as a track ribbon). Open-way
+            # `railway=platform` (just a centerline) falls through to the
+            # railway branch as before.
+            bin_["railway_platforms"].append(RailwayPlatform(
+                id=w.id,
+                coordinates=coords,
+                name=tags.get("name"),
+                ref=tags.get("ref"),
+            ))
         elif "railway" in tags:
             self._add_railway(bin_, w.id, coords, tags)
         elif tags.get("waterway"):

@@ -173,6 +173,40 @@ class TrafficIsland(BaseModel):
     name: Optional[str] = None
 
 
+class RailwayPlatform(BaseModel):
+    """Bahnsteig — closed-area `railway=platform`. Rendered iOS-side as
+    a flat raised concrete slab with yellow stripe along the long edges
+    (Bahnsteigkante).
+
+    Typical S-Bahn-Halt: ~80 m long, ~4 m wide. Often paired with a
+    `building=roof` polygon (see `PlatformRoof`) — when missing, iOS
+    auto-emits a narrow fallback roof so small Vorort-Halts still get
+    visual character.
+    """
+    id: int
+    coordinates: list[Coord] = Field(min_length=3)
+    name: Optional[str] = None
+    ref: Optional[str] = None        # e.g. "Gleis 1"
+
+
+class PlatformRoof(BaseModel):
+    """Bahnsteig-Überdachung — `building=roof` polygon over a platform.
+    Often `layer>=1`. Rendered iOS-side as a flat roof at ~3 m height
+    with thin steel pillars at the corners + edges.
+
+    Distinct from full `Building` records: a `building=roof` polygon
+    represents a free-standing canopy / Vordach with no walls, so it
+    must NOT be extruded as a solid box. The bake extracts these in
+    parallel to (not instead of) the building branch — the way handler
+    routes `building=roof` here BEFORE the regular building branch.
+    """
+    id: int
+    coordinates: list[Coord] = Field(min_length=3)
+    height_m: Optional[float] = None      # roof height above ground
+    roof_material: Optional[str] = None   # "glass" → translucent
+    layer: int = 0
+
+
 class Coastline(BaseModel):
     """Linear `natural=coastline` way separating sea from land.
 
@@ -219,3 +253,9 @@ class OSMTile(BaseModel):
     # extraction of `natural=coastline` ways. Empty on non-coastal states
     # (de_he, de_by, …). Default empty so pre-existing tiles still validate.
     coastlines: list[Coastline] = Field(default_factory=list)
+    # v3 backward-compatible addition (May 2026): Bahnsteige + Bahnsteig-
+    # Überdachungen. Default empty so pre-Item-5 tiles validate; new bakes
+    # carry one or both lists populated. Schema_version stays at 3 — iOS
+    # clients that don't know the field decode with `?? []` fallback.
+    railway_platforms: list[RailwayPlatform] = Field(default_factory=list)
+    platform_roofs: list[PlatformRoof] = Field(default_factory=list)

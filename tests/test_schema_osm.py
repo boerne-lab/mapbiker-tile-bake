@@ -295,3 +295,89 @@ def test_osm_tile_coastlines_default_empty():
         bridges=[], landuse=[], barriers=[], traffic_islands=[],
     )
     assert tile.coastlines == []
+
+
+def test_osm_tile_accepts_railway_platforms_and_platform_roofs():
+    """Bahnsteig + Bahnsteig-Überdachung records validate inside OSMTile."""
+    from bake.schema_osm import (
+        OSMTile, TileCoord, RailwayPlatform, PlatformRoof, Coord,
+    )
+    tile = OSMTile(
+        schema_version=3,
+        state="de_he",
+        tile=TileCoord(z=15, x=17174, y=11097),
+        generated_at="2026-05-16T00:00:00Z",
+        source_dataset_version="test",
+        buildings=[], roads=[], waterways=[], water_polygons=[],
+        railways=[], traffic_signals=[], trees=[], forests=[],
+        bridges=[], landuse=[], barriers=[], traffic_islands=[],
+        coastlines=[],
+        railway_platforms=[
+            RailwayPlatform(
+                id=101,
+                coordinates=[
+                    Coord(lat=50.110, lon=8.682),
+                    Coord(lat=50.110, lon=8.683),
+                    Coord(lat=50.1101, lon=8.683),
+                    Coord(lat=50.1101, lon=8.682),
+                    Coord(lat=50.110, lon=8.682),
+                ],
+                name="Hofheim",
+                ref="Gleis 1",
+            ),
+        ],
+        platform_roofs=[
+            PlatformRoof(
+                id=202,
+                coordinates=[
+                    Coord(lat=50.110, lon=8.682),
+                    Coord(lat=50.110, lon=8.683),
+                    Coord(lat=50.1101, lon=8.683),
+                    Coord(lat=50.1101, lon=8.682),
+                    Coord(lat=50.110, lon=8.682),
+                ],
+                height_m=3.5,
+                roof_material="glass",
+                layer=1,
+            ),
+        ],
+    )
+    assert len(tile.railway_platforms) == 1
+    assert tile.railway_platforms[0].ref == "Gleis 1"
+    assert len(tile.platform_roofs) == 1
+    assert tile.platform_roofs[0].roof_material == "glass"
+    assert tile.platform_roofs[0].layer == 1
+
+
+def test_osm_tile_railway_platforms_and_roofs_default_empty():
+    """Pre-Item-5 tiles validate with the new fields defaulting to []."""
+    from bake.schema_osm import OSMTile, TileCoord
+    tile = OSMTile(
+        schema_version=3,
+        state="de_he",
+        tile=TileCoord(z=15, x=17174, y=11097),
+        generated_at="2026-05-16T00:00:00Z",
+        source_dataset_version="test",
+        buildings=[], roads=[], waterways=[], water_polygons=[],
+        railways=[], traffic_signals=[], trees=[], forests=[],
+        bridges=[], landuse=[], barriers=[], traffic_islands=[],
+    )
+    assert tile.railway_platforms == []
+    assert tile.platform_roofs == []
+
+
+def test_platform_roof_defaults_for_optional_fields():
+    """PlatformRoof with no height_m / material / layer falls back cleanly."""
+    from bake.schema_osm import PlatformRoof, Coord
+    p = PlatformRoof(
+        id=1,
+        coordinates=[
+            Coord(lat=0.0, lon=0.0),
+            Coord(lat=0.0, lon=0.001),
+            Coord(lat=0.001, lon=0.001),
+            Coord(lat=0.0, lon=0.0),
+        ],
+    )
+    assert p.height_m is None
+    assert p.roof_material is None
+    assert p.layer == 0

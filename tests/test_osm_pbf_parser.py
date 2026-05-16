@@ -130,6 +130,162 @@ def test_coastline_way_extracted_to_coastlines_bin():
     assert bin_["coastlines"][0].id == 999
 
 
+# --- Bahnsteige (RailwayPlatform) + Bahnsteig-Überdachungen (PlatformRoof) ---
+
+
+class _FakeLocation:
+    def __init__(self, lat, lon):
+        self.lat = lat
+        self.lon = lon
+
+    def valid(self):
+        return True
+
+
+class _FakeNode:
+    def __init__(self, lat, lon):
+        self.location = _FakeLocation(lat, lon)
+        self.lat = lat
+        self.lon = lon
+
+
+class _FakeWay:
+    """Minimal osmium-way stand-in for direct `_Handler.way()` tests.
+    Mirrors the attribute access pattern in `bake.sources.osm_pbf.way`:
+    `.id`, `.nodes` (iterable of objects with `.lat`/`.lon`/`.location.valid()`),
+    `.tags` (iterable of (key, value) pairs, dict()-able)."""
+    def __init__(self, wid, node_coords, tags):
+        self.id = wid
+        self.nodes = [_FakeNode(la, lo) for la, lo in node_coords]
+        # dict() over .tags is exercised by the handler; pass through unchanged.
+        self.tags = tags
+
+
+def test_railway_platform_closed_way_extracted():
+    """A closed `railway=platform` way produces a RailwayPlatform record,
+    NOT a Railway line record."""
+    from bake.sources.osm_pbf import _Handler
+    h = _Handler()
+    # Closed ring (first == last). Hofheim S-Bahn-Halt approximation.
+    ring = [
+        (50.090, 8.443), (50.090, 8.4435),
+        (50.0905, 8.4435), (50.0905, 8.443),
+        (50.090, 8.443),
+    ]
+    h.way(_FakeWay(
+        wid=12345,
+        node_coords=ring,
+        tags={"railway": "platform", "name": "Hofheim", "ref": "Gleis 1"},
+    ))
+    # Find the bin that received the record (any non-empty bin works).
+    platforms = []
+    railways = []
+    for bin_ in h.bins.values():
+        platforms.extend(bin_["railway_platforms"])
+        railways.extend(bin_["railways"])
+    assert len(platforms) == 1
+    assert platforms[0].id == 12345
+    assert platforms[0].name == "Hofheim"
+    assert platforms[0].ref == "Gleis 1"
+    # Crucial: must NOT have leaked into the railway-line bin.
+    assert railways == [], "closed railway=platform must NOT become a Railway"
+
+
+def test_open_railway_platform_falls_back_to_railway():
+    """An OPEN (non-closed) `railway=platform` way — just a centerline,
+    not a polygon — falls through to the Railway branch as before.
+    This guards the iOS render path: open ways aren't polygons we can
+    triangulate."""
+    from bake.sources.osm_pbf import _Handler
+    h = _Handler()
+    # Open polyline — first != last.
+    coords = [(50.090, 8.443), (50.090, 8.4435), (50.0905, 8.4435)]
+    h.way(_FakeWay(
+        wid=77,
+        node_coords=coords,
+        tags={"railway": "platform"},
+    ))
+    platforms = []
+    railways = []
+    for bin_ in h.bins.values():
+        platforms.extend(bin_["railway_platforms"])
+        railways.extend(bin_["railways"])
+    # No closed-area record …
+    assert platforms == []
+    # … but it WAS classified as a railway line (kind="platform").
+    assert len(railways) == 1
+    assert railways[0].kind == "platform"
+
+
+def test_building_roof_closed_way_extracted_as_platform_roof():
+    """A closed `building=roof` way produces a PlatformRoof record,
+    NOT a regular Building (which would be extruded as a solid box)."""
+    from bake.sources.osm_pbf import _Handler
+    h = _Handler()
+    ring = [
+        (50.090, 8.443), (50.090, 8.4435),
+        (50.0905, 8.4435), (50.0905, 8.443),
+        (50.090, 8.443),
+    ]
+    h.way(_FakeWay(
+        wid=54321,
+        node_coords=ring,
+        tags={
+            "building": "roof",
+            "height": "3.2",
+            "roof:material": "glass",
+            "layer": "1",
+        },
+    ))
+    roofs = []
+    buildings = []
+    for bin_ in h.bins.values():
+        roofs.extend(bin_["platform_roofs"])
+        buildings.extend(bin_["buildings"])
+    assert len(roofs) == 1
+    r = roofs[0]
+    assert r.id == 54321
+    assert r.height_m == 3.2
+    assert r.roof_material == "glass"
+    assert r.layer == 1
+    # Crucial: must NOT have leaked into the buildings bin.
+    assert buildings == [], "building=roof must NOT become a Building"
+
+
+def test_platform_roof_handles_missing_height_and_invalid_layer():
+    """height_m=None and layer=0 when tags are missing/malformed."""
+    from bake.sources.osm_pbf import _Handler
+    h = _Handler()
+    ring = [
+        (50.090, 8.443), (50.090, 8.4435),
+        (50.0905, 8.4435), (50.090, 8.443),
+    ]
+    h.way(_FakeWay(
+        wid=99,
+        node_coords=ring,
+        tags={"building": "roof", "layer": "not-a-number"},
+    ))
+    roofs = []
+    for bin_ in h.bins.values():
+        roofs.extend(bin_["platform_roofs"])
+    assert len(roofs) == 1
+    assert roofs[0].height_m is None
+    assert roofs[0].roof_material is None
+    assert roofs[0].layer == 0   # malformed layer → 0 fallback
+
+
+def test_handler_bin_initialises_new_keys():
+    """The _Handler bin dict carries the two new keys so callers
+    can append without KeyError."""
+    from bake.sources.osm_pbf import _Handler
+    h = _Handler()
+    bin_ = h._bin(17000, 11000)
+    assert "railway_platforms" in bin_
+    assert "platform_roofs" in bin_
+    assert bin_["railway_platforms"] == []
+    assert bin_["platform_roofs"] == []
+
+
 def test_building_colour_and_material():
     """A building with building:colour=red and building:material=brick populates
     Building.colour and Building.material correctly."""
