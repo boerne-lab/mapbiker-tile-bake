@@ -253,3 +253,45 @@ def test_barrier_requires_two_coords():
             id=1, coordinates=[Coord(lat=0, lon=0)],  # only 1 coord — invalid
             kind="fence",
         )
+
+
+def test_osm_tile_accepts_coastline_records():
+    from bake.schema_osm import OSMTile, TileCoord, Coastline, Coord
+    tile = OSMTile(
+        schema_version=3,
+        state="de_sh",
+        tile=TileCoord(z=15, x=17000, y=11000),
+        generated_at="2026-05-16T00:00:00Z",
+        source_dataset_version="test",
+        buildings=[], roads=[], waterways=[], water_polygons=[],
+        railways=[], traffic_signals=[], trees=[], forests=[],
+        bridges=[], landuse=[], barriers=[], traffic_islands=[],
+        coastlines=[
+            Coastline(
+                id=42,
+                coordinates=[
+                    Coord(lat=54.0, lon=8.0),
+                    Coord(lat=54.001, lon=8.001),
+                ],
+                name="Test Küste",
+            )
+        ],
+    )
+    assert len(tile.coastlines) == 1
+    assert tile.coastlines[0].id == 42
+    assert tile.coastlines[0].name == "Test Küste"
+
+
+def test_osm_tile_coastlines_default_empty():
+    from bake.schema_osm import OSMTile, TileCoord
+    tile = OSMTile(
+        schema_version=3,
+        state="de_he",
+        tile=TileCoord(z=15, x=17174, y=11097),
+        generated_at="2026-05-16T00:00:00Z",
+        source_dataset_version="test",
+        buildings=[], roads=[], waterways=[], water_polygons=[],
+        railways=[], traffic_signals=[], trees=[], forests=[],
+        bridges=[], landuse=[], barriers=[], traffic_islands=[],
+    )
+    assert tile.coastlines == []
