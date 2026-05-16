@@ -176,11 +176,11 @@ class TrafficIsland(BaseModel):
 class Coastline(BaseModel):
     """Linear `natural=coastline` way separating sea from land.
 
-    OSM convention: walking forward along the way, the sea is on the LEFT,
-    land on the RIGHT. The bake stores this implicitly (the linestring
-    order is preserved); iOS renders the sea-side polygon by offsetting
-    LEFT-perpendicular at large radius (5 km is enough — it disappears
-    into the horizon mesh).
+    OSM convention: walking forward along the way, the **water is on the
+    right**, land on the left. The bake stores this implicitly (the
+    linestring order is preserved); iOS renders the sea-side polygon by
+    offsetting RIGHT-perpendicular at large radius (25 km — past the
+    horizon mesh's near edge so the seaward join is hidden).
 
     Stored as a linestring (`coordinates` length >= 2) per way. iOS
     handles coastline-segment stitching at runtime; the bake does not
