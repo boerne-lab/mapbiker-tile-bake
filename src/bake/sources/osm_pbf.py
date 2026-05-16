@@ -12,7 +12,7 @@ from bake.schema_osm import (
     OSMTile, TileCoord, Coord,
     Building, Road, Railway, Tree, Forest, LandUse,
     Waterway, WaterPolygon, TrafficSignal, Bridge, Barrier,
-    TrafficIsland,
+    TrafficIsland, Coastline,
 )
 from bake.normalize.classify_osm import (
     classify_building, classify_landuse, classify_road,
@@ -70,7 +70,7 @@ class _Handler(osmium.SimpleHandler):
                 "water_polygons": [], "railways": [],
                 "traffic_signals": [], "trees": [], "forests": [],
                 "bridges": [], "landuse": [], "barriers": [],
-                "traffic_islands": [],
+                "traffic_islands": [], "coastlines": [],
             }
         return self.bins[key]
 
@@ -156,6 +156,17 @@ class _Handler(osmium.SimpleHandler):
                 name=tags.get("name"),
                 width_m=_parse_float(tags.get("width")),
             ))
+        elif tags.get("natural") == "coastline":
+            # Coastline is a LINESTRING in OSM convention (sea on left).
+            # Even when closed (small islands), iOS handles the ring as a
+            # single linestring with a closed indication implicit in coord
+            # equality at endpoints. Min 2 coords required by schema.
+            if len(coords) >= 2:
+                bin_["coastlines"].append(Coastline(
+                    id=w.id,
+                    coordinates=coords,
+                    name=tags.get("name"),
+                ))
         elif (tags.get("natural") == "water" or "water" in tags) and is_closed:
             water_kind = classify_water_subkind(water_tag=tags.get("water"))
             bin_["water_polygons"].append(WaterPolygon(

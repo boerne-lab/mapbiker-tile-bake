@@ -173,6 +173,25 @@ class TrafficIsland(BaseModel):
     name: Optional[str] = None
 
 
+class Coastline(BaseModel):
+    """Linear `natural=coastline` way separating sea from land.
+
+    OSM convention: walking forward along the way, the **water is on the
+    right**, land on the left. The bake stores this implicitly (the
+    linestring order is preserved); iOS renders the sea-side polygon by
+    offsetting RIGHT-perpendicular at large radius (25 km — past the
+    horizon mesh's near edge so the seaward join is hidden).
+
+    Stored as a linestring (`coordinates` length >= 2) per way. iOS
+    handles coastline-segment stitching at runtime; the bake does not
+    merge adjacent ways here (cost vs benefit isn't worth it given the
+    typical 1–3 coastline ways per coastal tile).
+    """
+    id: int
+    coordinates: list[Coord] = Field(min_length=2)
+    name: Optional[str] = None
+
+
 class OSMTile(BaseModel):
     schema_version: Literal[3]
     state: Literal["de_by", "de_nw", "de_he", "de_be", "de_bb",
@@ -196,3 +215,7 @@ class OSMTile(BaseModel):
     # Default empty so pre-v3.1 tiles still validate. Schema_version
     # stays at 3 — iOS clients that don't know the field ignore it.
     traffic_islands: list[TrafficIsland] = Field(default_factory=list)
+    # v3 backward-compatible addition (May 2026): coastlines. Linestring
+    # extraction of `natural=coastline` ways. Empty on non-coastal states
+    # (de_he, de_by, …). Default empty so pre-existing tiles still validate.
+    coastlines: list[Coastline] = Field(default_factory=list)
