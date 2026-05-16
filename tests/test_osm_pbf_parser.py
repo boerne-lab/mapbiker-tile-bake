@@ -112,6 +112,24 @@ def test_water_polygon_lake_populates_kind():
     assert w.name == "Teststausee"
 
 
+def test_coastline_way_extracted_to_coastlines_bin():
+    """Direct-bin-injection check that the handler initialises a
+    `coastlines` list in each bin and that Coastline records can be
+    appended. NOTE: the public class is `_Handler` (private) and
+    `_bin()` takes only (x, y) — adapted from plan's `OSMTileBins`
+    sketch to the actual API."""
+    from bake.sources.osm_pbf import _Handler
+    from bake.schema_osm import Coastline, Coord
+    h = _Handler()
+    bin_ = h._bin(17000, 11000)
+    coords = [Coord(lat=54.0, lon=8.0), Coord(lat=54.001, lon=8.001),
+              Coord(lat=54.002, lon=8.002)]
+    bin_["coastlines"].append(Coastline(id=999, coordinates=coords,
+                                        name=None))
+    assert len(bin_["coastlines"]) == 1
+    assert bin_["coastlines"][0].id == 999
+
+
 def test_building_colour_and_material():
     """A building with building:colour=red and building:material=brick populates
     Building.colour and Building.material correctly."""
