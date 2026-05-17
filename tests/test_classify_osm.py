@@ -19,7 +19,7 @@ from bake.normalize.classify_osm import (
     ("hospital", "civic"),
     ("barn", "agricultural"),
     ("castle", "historic"),
-    ("yes", "unknown"),
+    ("yes", "residential"),   # pragmatic default (see classify_osm_tables.json)
     ("nonsense", "unknown"),
     (None, "unknown"),
 ])

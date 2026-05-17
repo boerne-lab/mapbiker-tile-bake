@@ -2,10 +2,16 @@
 import pytest
 
 
-def test_building_no_specific_type_classifies_unknown():
-    """OSM `building=yes` → unknown class, not residential."""
+def test_building_yes_classifies_residential():
+    """OSM `building=yes` → `residential` (pragmatic default — in
+    OSM, untagged `building=yes` polygons in residential areas are
+    overwhelmingly houses, and the procedural-3D-world renderer
+    treats them as residential rather than rendering an "unknown"
+    boring grey blob). The JSON table at `data/classify_osm_tables.json`
+    is the source of truth and explicitly maps `yes → residential`.
+    """
     from bake.normalize.classify_osm import classify_building
-    assert classify_building("yes") == "unknown"
+    assert classify_building("yes") == "residential"
 
 
 def test_road_no_surface_yields_unknown_surface_class():

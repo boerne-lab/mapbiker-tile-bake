@@ -22,7 +22,7 @@ HESSEN_RURAL_TILE = ("de_he", 17150, 11030)
 
 def test_urban_tile_has_all_expected_layers():
     tile = _load_osm_tile(*FRANKFURT_TILE)
-    assert tile["schema_version"] == 1
+    assert tile["schema_version"] == 3   # bumped from 1 → 2 → 3 over 2026-05
     assert len(tile["buildings"]) > 0, "no buildings in urban tile"
     assert len(tile["roads"]) > 0, "no roads in urban tile"
     assert len(tile["landuse"]) > 0, "no landuse polygons in urban tile"

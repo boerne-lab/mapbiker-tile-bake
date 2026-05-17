@@ -101,7 +101,8 @@
     "ground": "gravel",
     "dirt": "gravel",
     "earth": "gravel",
-    "sand": "gravel"
+    "sand": "gravel",
+    "grass": "gravel"
   },
   "OSM_RAILWAY_TO_CLASS": {
     "rail": "mainline",
