@@ -24,6 +24,9 @@ KEEP_KEYS: frozenset[str] = frozenset({
     "barrier",
     # v3 additions: tree taxon
     "taxon",
+    # Bus stops (highway=bus_stop nodes use `shelter` to decide whether
+    # the iOS-side Wartehäuschen + glass roof should be rendered).
+    "shelter",
     # Common
     "name", "ref",
 })

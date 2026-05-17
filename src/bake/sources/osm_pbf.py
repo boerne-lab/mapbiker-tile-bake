@@ -11,7 +11,7 @@ import osmium
 from bake.schema_osm import (
     OSMTile, TileCoord, Coord,
     Building, Road, Railway, Tree, Forest, LandUse,
-    Waterway, WaterPolygon, TrafficSignal, Bridge, Barrier,
+    Waterway, WaterPolygon, TrafficSignal, BusStop, Bridge, Barrier,
     TrafficIsland, Coastline, RailwayPlatform, PlatformRoof,
 )
 from bake.normalize.classify_osm import (
@@ -72,6 +72,7 @@ class _Handler(osmium.SimpleHandler):
                 "bridges": [], "landuse": [], "barriers": [],
                 "traffic_islands": [], "coastlines": [],
                 "railway_platforms": [], "platform_roofs": [],
+                "bus_stops": [],
             }
         return self.bins[key]
 
@@ -88,6 +89,15 @@ class _Handler(osmium.SimpleHandler):
                 id=n.id,
                 coordinate=Coord(lat=lat, lon=lon),
                 kind=tags["highway"],
+            ))
+        elif tags.get("highway") == "bus_stop":
+            bin_["bus_stops"].append(BusStop(
+                id=n.id,
+                coordinate=Coord(lat=lat, lon=lon),
+                name=tags.get("name"),
+                ref=tags.get("ref"),
+                has_shelter=(tags.get("shelter", "no").lower()
+                             in {"yes", "true", "1"}),
             ))
         elif tags.get("natural") == "tree":
             bin_["trees"].append(Tree(

@@ -95,6 +95,29 @@ def test_road_wikidata_optional_and_defaults_none():
     assert r_alte_bruecke.wikidata == "Q1378478"
 
 
+def test_bus_stop_with_shelter_flag():
+    """BusStop captures `highway=bus_stop` node + the `shelter=yes`
+    flag that the iOS-side mesh builder uses to decide whether to add
+    the Wartehäuschen + glass roof on top of the bare H-Schild pole."""
+    from bake.schema_osm import BusStop, Coord
+    with_shelter = BusStop(
+        id=1,
+        coordinate=Coord(lat=50.110, lon=8.682),
+        name="Konstablerwache",
+        ref="36",
+        has_shelter=True,
+    )
+    assert with_shelter.has_shelter is True
+    assert with_shelter.ref == "36"
+
+    bare_pole = BusStop(
+        id=2,
+        coordinate=Coord(lat=50.110, lon=8.681),
+    )
+    assert bare_pole.has_shelter is False
+    assert bare_pole.name is None
+
+
 def test_tree_with_species_class():
     from bake.schema_osm import Tree, Coord
     t = Tree(

@@ -157,6 +157,23 @@ class TrafficSignal(BaseModel):
     kind: str
 
 
+class BusStop(BaseModel):
+    """`highway=bus_stop` node — visible piece of urban infrastructure.
+    Rendered iOS-side as a yellow Bushaltestellen-H-Schild on a thin
+    pole (~3 m tall), optionally enclosed by a small Wartehäuschen
+    canopy (when `shelter=yes` is tagged in OSM).
+
+    The Wartehäuschen uses the glass-roof transparent material from
+    `PlatformRoofMeshBuilder.glassOpacity` so the canopy reads as a
+    real glass shelter, not as an opaque box.
+    """
+    id: int
+    coordinate: Coord
+    name: Optional[str] = None
+    ref: Optional[str] = None         # line numbers / route refs
+    has_shelter: bool = False
+
+
 class Bridge(BaseModel):
     id: int
     name: Optional[str] = None
@@ -266,3 +283,9 @@ class OSMTile(BaseModel):
     # clients that don't know the field decode with `?? []` fallback.
     railway_platforms: list[RailwayPlatform] = Field(default_factory=list)
     platform_roofs: list[PlatformRoof] = Field(default_factory=list)
+    # v3 backward-compatible addition (May 2026): `highway=bus_stop`
+    # nodes. Default empty so pre-this-bake tiles still validate.
+    # Rendered iOS-side as a yellow Bushaltestellen-H-Schild on a
+    # pole; if `shelter=yes` is tagged we add a small glass-roof
+    # Wartehäuschen around the pole.
+    bus_stops: list[BusStop] = Field(default_factory=list)
