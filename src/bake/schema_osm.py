@@ -75,6 +75,13 @@ class Road(BaseModel):
     width_m: Optional[float] = None   # OSM width=* in metres
     is_tunnel: bool = False            # OSM tunnel=yes (mirrors is_bridge)
     maxspeed: Optional[int] = None    # OSM maxspeed=* in km/h (integers only; "DE:urban" etc. → None)
+    # Landmark hook (v3 in-place, 2026-05-17): OSM wikidata=Q* tag on
+    # bridge ways carries the QID for famous structures (Alte Brücke
+    # Frankfurt Q1378478, Eiserner Steg Q1051867, etc.). iOS-side
+    # `LandmarkSpecialCatalog` matches against this QID to decide
+    # whether to apply a hand-curated procedural variant (arch count,
+    # statues, material) on top of the generic road/bridge mesh.
+    wikidata: Optional[str] = None
 
 
 class Railway(BaseModel):

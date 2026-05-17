@@ -65,6 +65,36 @@ def test_road_class_and_surface_class_required():
     assert r.surface_class == "unknown"
 
 
+def test_road_wikidata_optional_and_defaults_none():
+    """Road gains optional `wikidata` for landmark-special bridge
+    matching. Default None when not set; preserves the Q-ID string
+    verbatim when set (no validation — iOS catalog is the source of
+    truth for what Q-IDs map to which procedural variants).
+    """
+    from bake.schema_osm import Road, Coord
+    r_no_qid = Road(
+        id=1,
+        coordinates=[Coord(lat=0, lon=0), Coord(lat=0, lon=1)],
+        highway="residential",
+        road_class="local_road",
+        surface_class="paved",
+        sidewalk_left=False, sidewalk_right=False,
+    )
+    assert r_no_qid.wikidata is None
+
+    r_alte_bruecke = Road(
+        id=2,
+        coordinates=[Coord(lat=50.108, lon=8.681), Coord(lat=50.109, lon=8.682)],
+        highway="residential",
+        road_class="local_road",
+        surface_class="cobble",
+        is_bridge=True,
+        sidewalk_left=True, sidewalk_right=True,
+        wikidata="Q1378478",
+    )
+    assert r_alte_bruecke.wikidata == "Q1378478"
+
+
 def test_tree_with_species_class():
     from bake.schema_osm import Tree, Coord
     t = Tree(

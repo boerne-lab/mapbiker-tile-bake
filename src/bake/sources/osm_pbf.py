@@ -312,6 +312,7 @@ class _Handler(osmium.SimpleHandler):
             width_m=width_m,
             is_tunnel=is_tunnel,
             maxspeed=maxspeed,
+            wikidata=tags.get("wikidata"),
         ))
 
     def _add_barrier(self, bin_: dict, wid: int, coords: list[Coord], tags: dict):
